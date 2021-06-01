@@ -11,6 +11,7 @@ import torch
 import albumentations 
 from glob import glob
 from utils.config import cfg
+from utils.map_func import val_map
 from dataset.dataset import SIIMDataset
 from torch.utils.data import  DataLoader
 import torch.nn.functional as F
@@ -24,7 +25,6 @@ from tqdm import tqdm
 from warnings import filterwarnings
 filterwarnings("ignore")
 
-sys.path.append("utils")
 sys.path.append("models")
 
 SIIMModel = importlib.import_module(cfg["model"]).SIIMModel
@@ -149,7 +149,6 @@ def train_func(model, train_loader, scheduler, device):
     losses = []
     bar = tqdm(train_loader)
     for batch_idx, (images, targets) in enumerate(bar):
-        # print(images.shape, targets.shape)
         prediction = model(images.to(device))
 
         loss = criterion(prediction, targets.to(device))
@@ -212,7 +211,6 @@ def valid_func(model, valid_loader):
     origin_labels = np.concatenate(origin_labels)
     pred_probs = np.concatenate(pred_probs)
 
-    print(origin_labels.shape, pred_probs.shape)
     aucs = []
     for i in range(4):
     	aucs.append(roc_auc_score(origin_labels[:, i], pred_probs[:, i]))
@@ -224,12 +222,18 @@ def valid_func(model, valid_loader):
 
     loss_valid = np.mean(losses)
 
+    auc = np.mean(aucs)
+
+    map = val_map(origin_labels, pred_probs)
+
     if cfg.neptune_project:
         neptune.log_metric('VAL loss', loss_valid)
         neptune.log_metric('VAL micro f1 score', micro_score)
         neptune.log_metric('VAL macro f1 score', macro_score)
+        neptune.log_metric('VAL auc', auc)
+        neptune.log_metric('VAL map', map)
 
-    return loss_valid, micro_score, macro_score
+    return loss_valid, micro_score, macro_score, auc, map
 
 
 if __name__ == "__main__":
@@ -238,9 +242,6 @@ if __name__ == "__main__":
     device = "cuda"
 
     copyfile(os.path.basename(__file__), os.path.join(cfg.out_dir, os.path.basename(__file__)))
-    # for name in ['dataset', 'utils']:
-    #     copyfile(name, os.path.join(hp.out_dir, name))
-
 
     for fold_id in cfg.folds:
         log_path = f'{cfg.out_dir}/log_f{fold_id}.txt'
@@ -266,7 +267,7 @@ if __name__ == "__main__":
         for epoch in range(1, cfg.epochs+1):
             logfile(f'====epoch {epoch} ====')
             loss_train = train_func(model, train_loader, scheduler, device)
-            loss_valid, micro_score, macro_score = valid_func(model, valid_loader)
+            loss_valid, micro_score, macro_score, auc, map = valid_func(model, valid_loader)
 
             if micro_score > f1_score_max:
                 logfile(f'f1_score_max ({f1_score_max:.6f} --> {micro_score:.6f}). Saving model ...')
@@ -279,7 +280,16 @@ if __name__ == "__main__":
                 torch.save(model.state_dict(), f'{cfg.out_dir}/best_loss_fold{fold_id}.pth')
                 not_improving = 0
 
-            torch.save(model.state_dict(), f'{cfg.out_dir}/last_fold{fold_id}.pth')
+            checkpoint = {
+                "model": model.state_dict(),
+                "optimizer": optimizer.state_dict(),
+            }
+            if scheduler is not None:
+                checkpoint["scheduler"] = scheduler.state_dict()
+
+            torch.save(checkpoint, f'{cfg.out_dir}/last_checkpoint_fold{fold_id}.pth')
+
+            logfile(f'[EPOCH {epoch}] micro f1 score: {micro_score}, macro_score f1 score: {macro_score}, val loss: {loss_valid}, AUC: {auc}, MAP: {map}')
 
         if cfg.neptune_project:
             neptune.stop()

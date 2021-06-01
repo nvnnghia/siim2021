@@ -111,37 +111,6 @@ def map_calc(det_data, gt_data):
         os.makedirs(TEMP_FILES_PATH)
 
     MINOVERLAP = 0.5
-    # """
-    #     load detection result
-    # """
-    # with open(det_path) as f:
-    #     lines = f.readlines()
-    # det_data = {}
-    # for line in lines:
-    #     frame, class_name, x1, y1, x2, y2, score = line.strip().split(' ')
-    #     if frame not in det_data.keys():
-    #         det_data[frame] = []
-    #     bbox = x1 + " " + y1 + " " + x2 + " " +y2
-    #     det_data[frame].append({"class_name":class_name, "bbox":bbox, "confidence":score})
-
-
-    # """
-    #     load gt result
-    # """
-    # with open(gt_path) as f:
-    #     lines = f.readlines()
-    # gt_data = {}
-    # for line in lines:
-    #     frame, class_name, x1, y1, x2, y2 = line.strip().split(' ')
-    #     if frame not in gt_data.keys():
-    #         gt_data[frame] = []
-    #     bbox = x1 + " " + y1 + " " + x2 + " " +y2
-    #     gt_data[frame].append({"class_name":class_name, "bbox":bbox, "used":False})
-
-    # for frame in det_data.keys():
-    #     if frame not in gt_data.keys():
-    #         gt_data[frame] = []
-
 
     """
         Load each of the gt-results files into a temporary ".json" file.
@@ -325,3 +294,24 @@ def map_calc(det_data, gt_data):
     shutil.rmtree(TEMP_FILES_PATH)
 
     return mAP
+
+def val_map(gt_scores, pred_scores):
+    det_data = {}
+    gt_data = {}
+    for cc, (gt_score, pred_score) in enumerate(zip(gt_scores, pred_scores)):
+        if cc not in gt_data.keys():
+            gt_data[cc] = []
+        if cc not in det_data.keys():
+            det_data[cc] = []
+        for i in range(4):
+            if gt_score[i] >0.8:
+                bbox = "0 0 1 1"
+                gt_data[cc].append({"class_name":str(i), "bbox":bbox, "used":False})
+
+            if pred_score[i]>0:
+                bbox = "0 0 1 1"
+                det_data[cc].append({"class_name":str(i), "bbox":bbox, "confidence":str(pred_score[i])})
+
+    map = map_calc(det_data, gt_data)
+    
+    return map
