@@ -113,13 +113,16 @@ def get_scheduler(cfg, optimizer, total_steps):
     return scheduler
 
 def get_dataloader(cfg, fold_id):
-    transforms_train = albumentations.Compose([
-        albumentations.Resize(cfg.input_size, cfg.input_size),
-        albumentations.HorizontalFlip(p=0.5),
-        albumentations.ShiftScaleRotate(p=0.5, shift_limit=0.0625, scale_limit=0.2, rotate_limit=20),
-        albumentations.Cutout(p=0.5, max_h_size=16, max_w_size=16, fill_value=(0., 0., 0.), num_holes=16),
-        # albumentations.Normalize(),
-    ])
+    if cfg.augmentation:
+        transforms_train = albumentations.load(f'configs/aug/{cfg.augmentation}', data_format='yaml')
+    else:
+        transforms_train = albumentations.Compose([
+            albumentations.Resize(cfg.input_size, cfg.input_size),
+            albumentations.HorizontalFlip(p=0.5),
+            albumentations.ShiftScaleRotate(p=0.7, shift_limit=0.0625, scale_limit=0.2, rotate_limit=20),
+            albumentations.Cutout(p=0.5, max_h_size=16, max_w_size=16, fill_value=(0., 0., 0.), num_holes=16),
+            # albumentations.Normalize(),
+        ])
 
     transforms_valid = albumentations.Compose([
         albumentations.Resize(cfg.input_size, cfg.input_size),
@@ -213,7 +216,7 @@ def valid_func(model, valid_loader):
 
     aucs = []
     for i in range(4):
-    	aucs.append(roc_auc_score(origin_labels[:, i], pred_probs[:, i]))
+        aucs.append(roc_auc_score(origin_labels[:, i], pred_probs[:, i]))
 
     print(np.round(aucs, 4))
 
@@ -254,13 +257,13 @@ if __name__ == "__main__":
         criterion = torch.nn.BCEWithLogitsLoss()
 
         if cfg.resume_training:
-        	chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}.pth'
-        	checkpoint = torch.load(chpt_path, map_location="cpu")
-        	model.load_state_dict(checkpoint["model"])
-        	optimizer.load_state_dict(checkpoint["optimizer"])
-        	if scheduler is not None:
-        		scheduler.load_state_dict(checkpoint["scheduler"])
-        		
+            chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}.pth'
+            checkpoint = torch.load(chpt_path, map_location="cpu")
+            model.load_state_dict(checkpoint["model"])
+            optimizer.load_state_dict(checkpoint["optimizer"])
+            if scheduler is not None:
+                scheduler.load_state_dict(checkpoint["scheduler"])
+
         if cfg.neptune_project:
             with open('neptune_api.txt') as f:
                 token = f.read().strip()
