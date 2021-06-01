@@ -9,11 +9,11 @@
 * Train: `python main.py -C n_cf1`
 
 ## TODO
-[x] Minimal baseline
-[x] Validation metrics
-[x] Resume training
-[x] Neptune
-[ ] Mixed_precision
-[ ] Multi-gpu
-[ ] Auxilliary segmentation head
-[ ] Traing and Test model
+- [x] Minimal baseline
+- [x] Validation metrics
+- [x] Resume training
+- [x] Neptune
+- [ ] Mixed_precision
+- [ ] Multi-gpu
+- [ ] Auxilliary segmentation head
+- [ ] Traing and Test model
