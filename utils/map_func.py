@@ -286,9 +286,9 @@ def map_calc(det_data, gt_data):
     # output_file.write('=============\n')
     mAP = sum_AP / n_classes
     print('='*20)
-    text = "mAP = {0:.4f}%".format(mAP*100)
+    # text = "mAP = {0:.4f}%".format(mAP*100)
     # output_file.write(text + "\n")
-    print(text)
+    # print(text)
 
     # remove the temp_files directory
     shutil.rmtree(TEMP_FILES_PATH)

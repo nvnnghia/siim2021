@@ -114,6 +114,7 @@ def get_scheduler(cfg, optimizer, total_steps):
 
 def get_dataloader(cfg, fold_id):
     if cfg.augmentation:
+        print("[ √ ] Using augmentation file", f'configs/aug/{cfg.augmentation}')
         transforms_train = albumentations.load(f'configs/aug/{cfg.augmentation}', data_format='yaml')
     else:
         transforms_train = albumentations.Compose([
@@ -250,6 +251,7 @@ if __name__ == "__main__":
         log_path = f'{cfg.out_dir}/log_f{fold_id}.txt'
 
         train_loader, valid_loader, total_steps = get_dataloader(cfg, fold_id)
+        total_steps = total_steps*cfg.epochs
         model = get_model(cfg).to(device)
         optimizer = get_optimizer(cfg, model)
         scheduler = get_scheduler(cfg, optimizer, total_steps)
