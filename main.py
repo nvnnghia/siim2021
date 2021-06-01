@@ -253,6 +253,14 @@ if __name__ == "__main__":
 
         criterion = torch.nn.BCEWithLogitsLoss()
 
+        if cfg.resume_training:
+        	chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}.pth'
+        	checkpoint = torch.load(chpt_path, map_location="cpu")
+        	model.load_state_dict(checkpoint["model"])
+        	optimizer.load_state_dict(checkpoint["optimizer"])
+        	if scheduler is not None:
+        		scheduler.load_state_dict(checkpoint["scheduler"])
+        		
         if cfg.neptune_project:
             with open('neptune_api.txt') as f:
                 token = f.read().strip()

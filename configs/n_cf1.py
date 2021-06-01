@@ -18,7 +18,7 @@ cfg = {
     "num_workers": 8,
     "optimizer": "Adam",  # Adam, SGD
     "lr": 1e-4,
-    "mixed_precision": False,
+    "mixed_precision": False, 
     "seed": 42,
     "neptune_project": None, #"nvnn/siim2021",
     "scheduler": "cosine",
