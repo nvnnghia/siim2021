@@ -38,14 +38,22 @@ class SIIMModel(nn.Module):
         else:
             raise NotImplementedError(f"pooling type {pool} has not implemented!")
 
+        self.global_pool = SelectAdaptivePool2d(pool_type="avg")
+
         if 'resne' in model_name: #resnet
             n_features = self.model.fc.in_features
             self.model.global_pool = nn.Identity()
             self.model.fc = nn.Identity()
-            feats_list = [n_features, 1024, 512, 256, 64]
 
-            self.bottleneck_b5 = Bottleneck(inplanes=1024,
-                                            planes=int(1024 / 4))
+            # print(self.model.conv1[-1].out_channels)
+            # print(self.model.layer1[-1].bn3.num_features)
+            # print(self.model.layer2[-1].bn3.num_features)
+            # print(self.model.layer3[-1].bn3.num_features)
+            # print(self.model.layer4[-1].bn3.num_features)
+
+            feats_list = [n_features, self.model.layer3[-1].bn3.num_features, self.model.layer2[-1].bn3.num_features, self.model.layer1[-1].bn3.num_features, self.model.conv1[-1].out_channels]
+
+            self.bottleneck_b5 = nn.Identity() #Bottleneck(inplanes=1024, planes=int(1024 / 4))
             self.fc_b5 = nn.Linear(1024, out_dim)
 
         elif "efficientnet" in model_name: 
@@ -58,7 +66,6 @@ class SIIMModel(nn.Module):
             self.conv_head = self.model.conv_head
             self.bn2 = self.model.bn2
             self.act2 = self.model.act2
-            self.global_pool = SelectAdaptivePool2d(pool_type="avg")
             n_features = self.model.num_features
             self.bottleneck_b4 = Bottleneck(inplanes=self.block4[-1].bn3.num_features,
                                             planes=int(self.block4[-1].bn3.num_features / 4))

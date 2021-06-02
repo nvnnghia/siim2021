@@ -193,7 +193,11 @@ def valid_func(model, valid_loader):
             images, targets = images.to(device), targets.to(device)
             logits = model(images)
 
-            prediction = F.sigmoid(logits)
+            if cfg.model in ['model_2']:
+            	prediction = logits
+            else:
+            	prediction = F.sigmoid(logits)
+
             proba = prediction.detach().cpu().numpy()
 
             pred_probs.append(proba)
@@ -258,7 +262,10 @@ if __name__ == "__main__":
         optimizer = get_optimizer(cfg, model)
         scheduler = get_scheduler(cfg, optimizer, total_steps)
 
-        criterion = torch.nn.BCEWithLogitsLoss()
+        if cfg.model in ['model_2']:
+        	criterion = torch.nn.BCELoss()
+        else:
+        	criterion = torch.nn.BCEWithLogitsLoss()
 
         if cfg.resume_training:
             chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}.pth'
