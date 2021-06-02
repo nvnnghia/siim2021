@@ -5,7 +5,7 @@ outputdir = "outputs/" + os.path.basename(__file__).split(".")[0]
 cfg = {
     "debug": False,
     "name": os.path.basename(__file__).split(".")[0],
-    "model_architecture": "tf_efficientnet_b3_ns",  # resnet200d, resnet18, transformer, seresnext26tn_32x4d tf_efficientnet_b3_ns
+    "model_architecture": "seresnext26tn_32x4d",  # resnet200d, resnet18, transformer, seresnext26tn_32x4d tf_efficientnet_b3_ns
     "image_dir": "data/png512",
     "train_csv_path": "data/train_split_seed42.csv",
     "input_size": 384,
@@ -24,10 +24,10 @@ cfg = {
     "lr": 1e-4,
     "mixed_precision": False, 
     "seed": 42,
-    "neptune_project": None,  
-    # "neptune_project": "nvnn/siim2021",
+    # "neptune_project": None,  
+    "neptune_project": "nvnn/siim2021",
     "scheduler": "cosine",
-    "model": "model_4",
+    "model": "model_1",
     "epochs": 15,
     "type": "train"
 }

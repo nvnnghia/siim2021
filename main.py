@@ -38,6 +38,16 @@ def set_seed(seed=1234):
     torch.backends.cudnn.deterministic = False
     torch.backends.cudnn.benchmark = True
 
+
+def sigmoid_rampup(current, rampup_length=15):
+    """Exponential rampup from https://arxiv.org/abs/1610.02242"""
+    if rampup_length == 0:
+        return 1.0
+    else:
+        current = np.clip(current, 0.0, rampup_length)
+        phase = 1.0 - current / rampup_length
+        return 0.9*float(np.exp(-5.0 * phase * phase))
+
 def get_model(cfg):
     model = SIIMModel(model_name=cfg.model_architecture, pretrained=True, pool=cfg.pool, dropout = cfg.dropout)
     return model
@@ -147,7 +157,7 @@ def get_dataloader(cfg, fold_id):
 
     return train_loader, val_loader, total_steps
 
-def train_func(model, train_loader, scheduler, device):
+def train_func(model, train_loader, scheduler, device, epoch):
     model.train()
     start_time = time.time()
     losses = []
@@ -169,7 +179,11 @@ def train_func(model, train_loader, scheduler, device):
         if cfg.use_seg:
             # print(seg_out[:,0,:,:].shape, hms[:,:,:,0].shape)
             hm_loss = seg_criterion(seg_out[:,0,:,:], hms[:,:,:,0].to(device))
-            loss += 5*hm_loss
+            
+            ratio = sigmoid_rampup(epoch, cfg.epochs)
+            ratio = 10*(1-ratio)
+
+            loss += ratio*hm_loss
         
         loss.backward()
         optimizer.step()
@@ -331,7 +345,7 @@ if __name__ == "__main__":
         map_score_max = 0
         for epoch in range(1, cfg.epochs+1):
             logfile(f'====epoch {epoch} ====')
-            loss_train = train_func(model, train_loader, scheduler, device)
+            loss_train = train_func(model, train_loader, scheduler, device, epoch)
             loss_valid, micro_score, macro_score, auc, map = valid_func(model, valid_loader)
 
             if map > map_score_max:
