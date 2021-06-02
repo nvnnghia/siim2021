@@ -13,6 +13,7 @@
 - [x] Validation metrics
 - [x] Resume training
 - [x] Neptune
+- [ ] Use NIH pretrained weights
 - [ ] Mixed_precision
 - [ ] Multi-gpu
 - [ ] Auxilliary segmentation head

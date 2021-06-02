@@ -13,7 +13,9 @@ from glob import glob
 from utils.config import cfg
 from utils.map_func import val_map
 from dataset.dataset import SIIMDataset
+from dataset.data_sampler import RandomSampler
 from torch.utils.data import  DataLoader
+from torch.nn.parallel import DistributedDataParallel as NativeDDP
 import torch.nn.functional as F
 from sklearn.metrics import f1_score
 from sklearn.metrics import accuracy_score, roc_auc_score
@@ -39,7 +41,7 @@ def set_seed(seed=1234):
     torch.backends.cudnn.benchmark = True
 
 def get_model(cfg):
-    model = SIIMModel(model_name=cfg.model_architecture, pretrained=True, pool=cfg.pool, dropout = cfg.dropout)
+    model = SIIMModel(model_name=cfg.model_architecture, pretrained=True, pool='gem')
     return model
 
 def logfile(message):
@@ -139,8 +141,14 @@ def get_dataloader(cfg, fold_id):
         val_df = val_df.head(100)
 
     train_dataset = SIIMDataset(train_df, tfms=transforms_train, cfg=cfg)
-    train_loader = DataLoader(train_dataset, batch_size=cfg.batch_size, shuffle=True,  num_workers=8, pin_memory=True)
     total_steps = len(train_dataset)
+
+    if cfg["distributed"]:
+        torch.distributed.barrier()
+
+    sampler = RandomSampler(len(train_dataset), i=0, PARAMS=cfg)
+    train_loader = DataLoader(train_dataset, batch_size=cfg.batch_size, shuffle=False,  sampler=sampler, num_workers=8, pin_memory=True)
+
 
     val_dataset = SIIMDataset(val_df, tfms=transforms_valid, cfg=cfg)
     val_loader = DataLoader(val_dataset, batch_size=cfg.batch_size, shuffle=False,  num_workers=8, pin_memory=True)
@@ -148,11 +156,16 @@ def get_dataloader(cfg, fold_id):
     return train_loader, val_loader, total_steps
 
 def train_func(model, train_loader, scheduler, device):
-    model.train()
     start_time = time.time()
     losses = []
     bar = tqdm(train_loader)
     for batch_idx, (images, targets) in enumerate(bar):
+        if cfg["distributed"]:
+            torch.distributed.barrier()
+
+        model.train()
+        torch.set_grad_enabled(True)
+
         prediction = model(images.to(device))
 
         loss = criterion(prediction, targets.to(device))
@@ -160,6 +173,9 @@ def train_func(model, train_loader, scheduler, device):
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
+
+        if cfg["distributed"]:
+            torch.cuda.synchronize()
 
         scheduler.step()
 
@@ -237,7 +253,7 @@ def valid_func(model, valid_loader):
         neptune.log_metric('VAL auc', auc)
         neptune.log_metric('VAL map', map)
         for cc, ap in enumerate(ap_list):
-        	neptune.log_metric(f'VAL map cls {cc}', ap)
+            neptune.log_metric(f'VAL map cls {cc}', ap)
 
     return loss_valid, micro_score, macro_score, auc, map
 
@@ -245,12 +261,47 @@ def valid_func(model, valid_loader):
 if __name__ == "__main__":
     set_seed(cfg["seed"])
 
-    device = "cuda"
+    # device = "cuda"
 
     copyfile(os.path.basename(__file__), os.path.join(cfg.out_dir, os.path.basename(__file__)))
 
     for fold_id in cfg.folds:
         log_path = f'{cfg.out_dir}/log_f{fold_id}.txt'
+
+        cfg["distributed"] = False
+        if "WORLD_SIZE" in os.environ:
+            # print('WORLD_SIZE',os.environ['WORLD_SIZE'])
+            cfg["distributed"] = int(os.environ["WORLD_SIZE"]) > 1
+            if cfg["distributed"]:
+                cfg.num_gpu = 1
+
+        cfg.device = "cuda:0"
+        cfg["world_size"] = 1
+        cfg.rank = 0  # global rank
+
+        if cfg["distributed"]:
+            cfg.local_rank = int(os.environ["LOCAL_RANK"])
+            # print("LOCAL_RANK",cfg.local_rank)
+            cfg.num_gpu = 1
+            device = "cuda:%d" % cfg.local_rank
+            print("device", device)
+            torch.cuda.set_device(cfg.local_rank)
+            torch.distributed.init_process_group(backend="nccl", init_method="env://")
+            cfg["world_size"] = torch.distributed.get_world_size()
+            cfg.rank = torch.distributed.get_rank()
+            print("Training in distributed mode with multiple processes, 1 GPU per process.")
+            print(f"Process {cfg.rank}, total {cfg.world_size}, local rank {cfg.local_rank}.")
+
+            assert cfg.rank >= 0
+
+        else:
+            cfg.local_rank = 0
+            cfg["world_size"] = 1
+            print("Training with a single process on %d GPUs." % cfg.num_gpu)
+
+            device = device = "cuda"
+
+
 
         train_loader, valid_loader, total_steps = get_dataloader(cfg, fold_id)
         total_steps = total_steps*cfg.epochs
@@ -259,6 +310,18 @@ if __name__ == "__main__":
         scheduler = get_scheduler(cfg, optimizer, total_steps)
 
         criterion = torch.nn.BCEWithLogitsLoss()
+
+        if cfg["distributed"]:
+            # if cfg.syncbn:
+            #     model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+
+            model = NativeDDP(
+                model,
+                device_ids=[cfg.local_rank],
+                find_unused_parameters=cfg["find_unused_parameters"],
+            )
+
+
 
         if cfg.resume_training:
             chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}.pth'
@@ -281,30 +344,69 @@ if __name__ == "__main__":
         f1_score_max = 0
         for epoch in range(1, cfg.epochs+1):
             logfile(f'====epoch {epoch} ====')
-            loss_train = train_func(model, train_loader, scheduler, device)
-            loss_valid, micro_score, macro_score, auc, map = valid_func(model, valid_loader)
+            # loss_train = train_func(model, train_loader, scheduler, device)
+            losses = []
+            bar = tqdm(train_loader)
+            for batch_idx, (images, targets) in enumerate(bar):
+                if cfg["distributed"]:
+                    torch.distributed.barrier()
 
-            if micro_score > f1_score_max:
-                logfile(f'f1_score_max ({f1_score_max:.6f} --> {micro_score:.6f}). Saving model ...')
-                torch.save(model.state_dict(), f'{cfg.out_dir}/best_f1_fold{fold_id}.pth')
-                f1_score_max = micro_score
+                model.train()
+                torch.set_grad_enabled(True)
+                optimizer.zero_grad()
 
-            if loss_valid < loss_min:
-                logfile(f'loss_min ({loss_min:.6f} --> {loss_valid:.6f}). Saving model ...')
-                loss_min = loss_valid
-                torch.save(model.state_dict(), f'{cfg.out_dir}/best_loss_fold{fold_id}.pth')
-                not_improving = 0
+                prediction = model(images.to(device))
 
-            checkpoint = {
-                "model": model.state_dict(),
-                "optimizer": optimizer.state_dict(),
-            }
-            if scheduler is not None:
-                checkpoint["scheduler"] = scheduler.state_dict()
+                loss = criterion(prediction, targets.to(device))
+                
+                loss.backward()
+                optimizer.step()
+                
+                if cfg["distributed"]:
+                    torch.cuda.synchronize()
 
-            torch.save(checkpoint, f'{cfg.out_dir}/last_checkpoint_fold{fold_id}.pth')
+                scheduler.step()
 
-            logfile(f'[EPOCH {epoch}] micro f1 score: {micro_score}, macro_score f1 score: {macro_score}, val loss: {loss_valid}, AUC: {auc}, MAP: {map}')
+                losses.append(loss.item())
+                smooth_loss = np.mean(losses[-30:])
+
+                if cfg.local_rank == 0:
+                    bar.set_description(f'loss: {loss.item():.5f}, smth: {smooth_loss:.5f}, LR {scheduler.get_lr()[0]:.6f}')
+
+                    if cfg.neptune_project:
+                        neptune.log_metric('train loss', smooth_loss)
+                        neptune.log_metric('LR', scheduler.get_lr()[0])
+
+                if batch_idx>10 and cfg.debug:
+                    break
+
+            loss_train = np.mean(losses)
+
+
+            if cfg.local_rank==0:
+                loss_valid, micro_score, macro_score, auc, map = valid_func(model, valid_loader)
+
+                if micro_score > f1_score_max:
+                    logfile(f'f1_score_max ({f1_score_max:.6f} --> {micro_score:.6f}). Saving model ...')
+                    torch.save(model.state_dict(), f'{cfg.out_dir}/best_f1_fold{fold_id}.pth')
+                    f1_score_max = micro_score
+
+                if loss_valid < loss_min:
+                    logfile(f'loss_min ({loss_min:.6f} --> {loss_valid:.6f}). Saving model ...')
+                    loss_min = loss_valid
+                    torch.save(model.state_dict(), f'{cfg.out_dir}/best_loss_fold{fold_id}.pth')
+                    not_improving = 0
+
+                checkpoint = {
+                    "model": model.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                }
+                if scheduler is not None:
+                    checkpoint["scheduler"] = scheduler.state_dict()
+
+                torch.save(checkpoint, f'{cfg.out_dir}/last_checkpoint_fold{fold_id}.pth')
+
+                logfile(f'[EPOCH {epoch}] micro f1 score: {micro_score}, macro_score f1 score: {macro_score}, val loss: {loss_valid}, AUC: {auc}, MAP: {map}')
 
         if cfg.neptune_project:
             neptune.stop()

@@ -31,15 +31,23 @@ class SIIMModel(nn.Module):
         # if pretrained:
         #     pretrained_path = '../input/resnet200d-pretrained-weight/resnet200d_ra2-bdba9bf9.pth'
         #     self.model.load_state_dict(torch.load(pretrained_path))
-        n_features = self.model.fc.in_features
-        self.model.global_pool = nn.Identity()
-        self.model.fc = nn.Identity()
+
         if pool == 'AdaptiveAvgPool2d':
             self.pooling = nn.AdaptiveAvgPool2d(1)
         elif pool == 'gem':
             self.pooling = GeM()
         else:
             raise NotImplementedError(f"pooling type {pool} has not implemented!")
+
+        if 'resne' in model_name: #resnet
+            n_features = self.model.fc.in_features
+            self.model.global_pool = nn.Identity()
+            self.model.fc = nn.Identity()
+        elif "efficientnet" in model_name: 
+            n_features = self.model.classifier.in_features
+            self.model.global_pool = nn.Identity()
+            self.model.classifier =  nn.Identity()
+        
 
         self.fc = nn.Linear(n_features, out_dim)
         self.dropout = nn.Dropout(dropout)

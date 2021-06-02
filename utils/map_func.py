@@ -178,6 +178,7 @@ def map_calc(det_data, gt_data):
     # with open(output_filename, 'w') as output_file:
         # output_file.write("# AP per class\n")
         # output_file.write('=============\n')
+    ap_list = []
     count_true_positives = {}
     for class_index, class_name in enumerate(gt_classes):
         count_true_positives[class_name] = 0
@@ -265,27 +266,30 @@ def map_calc(det_data, gt_data):
 
         ap, mrec, mprec = voc_ap(rec[:], prec[:])
         sum_AP += ap
+
+        ap_list.append(ap)
+
         # text = "{0:.2f}%".format(ap*100) + " = " + class_name + " AP " 
-        text = class_name + " AP = {0:.2f}%".format(ap*100)
+        # text = class_name + " AP = {0:.2f}%".format(ap*100)
         """
          Write to output.txt
         """
-        rounded_prec = [ '%.2f' % elem for elem in prec ]
-        rounded_rec = [ '%.2f' % elem for elem in rec ]
+        # rounded_prec = [ '%.2f' % elem for elem in prec ]
+        # rounded_rec = [ '%.2f' % elem for elem in rec ]
         # output_file.write(text + "\n Precision: " + str(rounded_prec) + "\n Recall :" + str(rounded_rec) + "\n\n")
         # output_file.write(text + "\n")
-        print(text)
-        ap_dictionary[class_name] = ap
+        # print(text)
+        # ap_dictionary[class_name] = ap
 
-        n_images = counter_images_per_class[class_name]
-        lamr, mr, fppi = log_average_miss_rate(np.array(prec), np.array(rec), n_images)
-        lamr_dictionary[class_name] = lamr
+        # n_images = counter_images_per_class[class_name]
+        # lamr, mr, fppi = log_average_miss_rate(np.array(prec), np.array(rec), n_images)
+        # lamr_dictionary[class_name] = lamr
 
 
     # output_file.write("\n# mAP of all classes\n")
     # output_file.write('=============\n')
     mAP = sum_AP / n_classes
-    print('='*20)
+    # print('='*20)
     # text = "mAP = {0:.4f}%".format(mAP*100)
     # output_file.write(text + "\n")
     # print(text)
@@ -293,7 +297,7 @@ def map_calc(det_data, gt_data):
     # remove the temp_files directory
     shutil.rmtree(TEMP_FILES_PATH)
 
-    return mAP
+    return mAP, ap_list
 
 def val_map(gt_scores, pred_scores):
     det_data = {}
@@ -312,6 +316,6 @@ def val_map(gt_scores, pred_scores):
                 bbox = "0 0 1 1"
                 det_data[cc].append({"class_name":str(i), "bbox":bbox, "confidence":str(pred_score[i])})
 
-    map = map_calc(det_data, gt_data)
+    map, ap_list = map_calc(det_data, gt_data)
     
-    return map
+    return map, ap_list
