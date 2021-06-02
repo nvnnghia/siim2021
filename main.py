@@ -152,10 +152,24 @@ def train_func(model, train_loader, scheduler, device):
     start_time = time.time()
     losses = []
     bar = tqdm(train_loader)
-    for batch_idx, (images, targets) in enumerate(bar):
-        prediction = model(images.to(device))
+    for batch_idx, batch_data in enumerate(bar):
+        if cfg.use_seg:
+            images, targets, hms = batch_data
+        else:
+            images, targets = batch_data
+
+        if cfg.use_seg:
+            prediction, seg_out = model(images.to(device))
+        else:
+            prediction = model(images.to(device))
+
 
         loss = criterion(prediction, targets.to(device))
+
+        if cfg.use_seg:
+            # print(seg_out[:,0,:,:].shape, hms[:,:,:,0].shape)
+            hm_loss = seg_criterion(seg_out[:,0,:,:], hms[:,:,:,0].to(device))
+            loss += 5*hm_loss
         
         loss.backward()
         optimizer.step()
@@ -166,7 +180,10 @@ def train_func(model, train_loader, scheduler, device):
         losses.append(loss.item())
         smooth_loss = np.mean(losses[-30:])
 
-        bar.set_description(f'loss: {loss.item():.5f}, smth: {smooth_loss:.5f}, LR {scheduler.get_lr()[0]:.6f}')
+        if cfg.use_seg:
+            bar.set_description(f'loss: {loss.item():.5f}, hm_loss: {hm_loss.item():.5f}, smth: {smooth_loss:.5f}, LR {scheduler.get_lr()[0]:.6f}')
+        else:
+            bar.set_description(f'loss: {loss.item():.5f}, smth: {smooth_loss:.5f}, LR {scheduler.get_lr()[0]:.6f}')
 
         if cfg.neptune_project:
             neptune.log_metric('train loss', smooth_loss)
@@ -189,14 +206,23 @@ def valid_func(model, valid_loader):
 
     losses = []
     with torch.no_grad():
-        for batch_idx, (images, targets) in enumerate(bar):
-            images, targets = images.to(device), targets.to(device)
-            logits = model(images)
-
-            if cfg.model in ['model_2']:
-            	prediction = logits
+        for batch_idx, batch_data in enumerate(bar):
+            if cfg.use_seg:
+                images, targets, hms = batch_data
             else:
-            	prediction = F.sigmoid(logits)
+                images, targets = batch_data
+
+            images, targets = images.to(device), targets.to(device)
+
+            if cfg.use_seg:
+                logits, seg_out = model(images)
+            else:
+                logits = model(images)
+
+            if cfg.model in ['model_2']: #use bceloss
+                prediction = logits
+            else:
+                prediction = F.sigmoid(logits)
 
             proba = prediction.detach().cpu().numpy()
 
@@ -209,9 +235,18 @@ def valid_func(model, valid_loader):
             origin_labels.append(targets.detach().cpu().numpy())
 
             loss = criterion(logits, targets)
+            if cfg.use_seg:
+                hm_loss = seg_criterion(seg_out, hms.to(device))
+                loss += 5*hm_loss
+
             losses.append(loss.item())
             smooth_loss = np.mean(losses[-30:])
-            bar.set_description(f'loss: {loss.item():.5f}, smth: {smooth_loss:.5f}')
+
+            if cfg.use_seg:
+                bar.set_description(f'loss: {loss.item():.5f}, hm_loss: {hm_loss.item():.5f}, smth: {smooth_loss:.5f}')
+            else:
+                bar.set_description(f'loss: {loss.item():.5f}, smth: {smooth_loss:.5f}')
+
             if batch_idx>30 and cfg.debug:
                 break
             
@@ -241,13 +276,17 @@ def valid_func(model, valid_loader):
         neptune.log_metric('VAL auc', auc)
         neptune.log_metric('VAL map', map)
         for cc, ap in enumerate(ap_list):
-        	neptune.log_metric(f'VAL map cls {cc}', ap)
+            neptune.log_metric(f'VAL map cls {cc}', ap)
 
     return loss_valid, micro_score, macro_score, auc, map
 
 
 if __name__ == "__main__":
     set_seed(cfg["seed"])
+
+    if cfg.model in ['model_4']:
+        print("[ √ ] Using segmentation")
+        cfg.use_seg = True
 
     device = "cuda"
 
@@ -263,9 +302,12 @@ if __name__ == "__main__":
         scheduler = get_scheduler(cfg, optimizer, total_steps)
 
         if cfg.model in ['model_2']:
-        	criterion = torch.nn.BCELoss()
+            criterion = torch.nn.BCELoss()
         else:
-        	criterion = torch.nn.BCEWithLogitsLoss()
+            criterion = torch.nn.BCEWithLogitsLoss()
+
+        if cfg.use_seg:
+            seg_criterion = torch.nn.MSELoss()
 
         if cfg.resume_training:
             chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}.pth'
@@ -282,34 +324,37 @@ if __name__ == "__main__":
             neptune.create_experiment(name=cfg.name, params=cfg)
             neptune.append_tag(cfg.model_architecture)
             neptune.append_tag(f'fold {fold_id}')
-
+            neptune.append_tag(f'use_seg {cfg.use_seg}')
+            neptune.append_tag(f'{cfg.model}')
 
         loss_min = 1e6
-        f1_score_max = 0
+        map_score_max = 0
         for epoch in range(1, cfg.epochs+1):
             logfile(f'====epoch {epoch} ====')
             loss_train = train_func(model, train_loader, scheduler, device)
             loss_valid, micro_score, macro_score, auc, map = valid_func(model, valid_loader)
 
-            if micro_score > f1_score_max:
-                logfile(f'f1_score_max ({f1_score_max:.6f} --> {micro_score:.6f}). Saving model ...')
-                torch.save(model.state_dict(), f'{cfg.out_dir}/best_f1_fold{fold_id}.pth')
-                f1_score_max = micro_score
+            if map > map_score_max:
+                logfile(f'map_score_max ({map_score_max:.6f} --> {map:.6f}). Saving model ...')
+                torch.save(model.state_dict(), f'{cfg.out_dir}/best_map_fold{fold_id}.pth')
+                map_score_max = map
 
             if loss_valid < loss_min:
                 logfile(f'loss_min ({loss_min:.6f} --> {loss_valid:.6f}). Saving model ...')
                 loss_min = loss_valid
                 torch.save(model.state_dict(), f'{cfg.out_dir}/best_loss_fold{fold_id}.pth')
-                not_improving = 0
 
-            checkpoint = {
-                "model": model.state_dict(),
-                "optimizer": optimizer.state_dict(),
-            }
-            if scheduler is not None:
-                checkpoint["scheduler"] = scheduler.state_dict()
+            if epoch == cfg.epochs:
+                torch.save(model.state_dict(), f'{cfg.out_dir}/last_checkpoint_fold{fold_id}.pth')
+            else:
+                checkpoint = {
+                    "model": model.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                }
+                if scheduler is not None:
+                    checkpoint["scheduler"] = scheduler.state_dict()
 
-            torch.save(checkpoint, f'{cfg.out_dir}/last_checkpoint_fold{fold_id}.pth')
+                torch.save(checkpoint, f'{cfg.out_dir}/last_checkpoint_fold{fold_id}.pth')
 
             logfile(f'[EPOCH {epoch}] micro f1 score: {micro_score}, macro_score f1 score: {macro_score}, val loss: {loss_valid}, AUC: {auc}, MAP: {map}')
 

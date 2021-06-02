@@ -16,5 +16,5 @@
 - [ ] Use NIH pretrained weights
 - [ ] Mixed_precision
 - [ ] Multi-gpu
-- [ ] Auxilliary segmentation head
+- [x] Auxilliary segmentation head
 - [ ] Traing and Test model

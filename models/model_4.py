@@ -216,7 +216,7 @@ class SIIMModel(nn.Module):
         bs = ipt.size()[0]
 
         x0, x1, x2, x3, x4 = self._features(ipt)
-        print(x0.shape, x1.shape, x2.shape, x3.shape, x4.shape)
+        # print(x0.shape, x1.shape, x2.shape, x3.shape, x4.shape)
 
         skip = [x0, x1, x2, x3]
         z = self.center(x4)
@@ -232,7 +232,7 @@ class SIIMModel(nn.Module):
         pooled_features = self.pooling(x4).view(bs, -1)
         cls_logit = self.fc(self.dropout(pooled_features))
 
-        return cls_logit
+        return cls_logit, seg_logit
 
     @property
     def net(self):
