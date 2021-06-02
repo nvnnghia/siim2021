@@ -117,7 +117,7 @@ class SIIMModel(nn.Module):
             n_features = self.model.fc.in_features
             self.model.global_pool = nn.Identity()
             self.model.fc = nn.Identity()
-            feats_list = [n_features, 1024, 512, 256, 64]
+            feats_list = [n_features, self.model.layer3[-1].bn3.num_features, self.model.layer2[-1].bn3.num_features, self.model.layer1[-1].bn3.num_features, self.model.conv1[-1].out_channels]
         elif "efficientnet" in model_name: 
             self.conv_stem = self.model.conv_stem
             self.bn1 = self.model.bn1
@@ -140,6 +140,12 @@ class SIIMModel(nn.Module):
             feats_list = [n_features, self.block4[-1].bn3.num_features, self.block2[-1].bn3.num_features, self.block1[-1].bn3.num_features, self.block0[-1].bn2.num_features]
 
             del self.model
+        elif "nfnet" in model_name: 
+            self.model.head = nn.Identity()
+            n_features = self.model.final_conv.out_channels
+            feats_list = [n_features, self.model.stages[-2][-1].conv3.out_channels, self.model.stages[-3][-1].conv3.out_channels, self.model.stages[-4][-1].conv3.out_channels, self.model.stem[-1].out_channels]
+        else:
+            raise NotImplementedError(f"model type {model_name} has not implemented!")
 
         
 
@@ -211,6 +217,19 @@ class SIIMModel(nn.Module):
             x3 = self.layer3(x2)
             x4 = self.layer4(x3)
             return x0, x1, x2, x3, x4
+        elif "nfnet" in self.model_name: 
+            x = self.model.stem(x)
+            # print(x.shape)
+            # x = self.model.stages(x)
+            feats = [x]
+            for m in self.model.stages:
+                x = m(x)
+                feats.append(x)
+
+            x = self.model.final_conv(x)
+            features = self.model.final_act(x)
+
+            return feats[0], feats[1], feats[2], feats[3], features
 
     def forward(self, ipt):
         bs = ipt.size()[0]

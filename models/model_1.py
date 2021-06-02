@@ -47,6 +47,12 @@ class SIIMModel(nn.Module):
             n_features = self.model.classifier.in_features
             self.model.global_pool = nn.Identity()
             self.model.classifier =  nn.Identity()
+
+        elif "nfnet" in model_name: 
+            self.model.head = nn.Identity()
+            n_features = self.model.final_conv.out_channels
+        else:
+            raise NotImplementedError(f"model type {model_name} has not implemented!")
         
 
         self.fc = nn.Linear(n_features, out_dim)
