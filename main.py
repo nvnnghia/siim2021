@@ -20,6 +20,8 @@ import torch.nn.functional as F
 from sklearn.metrics import f1_score
 from sklearn.metrics import accuracy_score, roc_auc_score
 from transformers import get_cosine_schedule_with_warmup, get_linear_schedule_with_warmup
+
+from utils.parallel import DataParallelModel, DataParallelCriterion
 import time 
 import neptune
 from shutil import copyfile
@@ -249,6 +251,8 @@ def valid_func(model, valid_loader):
             else:
                 logits = model(images)
 
+            loss = criterion(logits, targets)
+
             if cfg.model in ['model_2']: #use bceloss
                 prediction = logits
             else:
@@ -264,7 +268,6 @@ def valid_func(model, valid_loader):
             pred_results.append(pred_labels)
             origin_labels.append(targets.detach().cpu().numpy())
 
-            loss = criterion(logits, targets)
             if cfg.use_seg:
                 hm_loss = seg_criterion(seg_out, hms.to(device))
                 loss += 5*hm_loss
@@ -329,6 +332,9 @@ if __name__ == "__main__":
         train_loader, valid_loader, total_steps, val_df = get_dataloader(cfg, fold_id)
         total_steps = total_steps*cfg.epochs
         model = get_model(cfg).to(device)
+
+        if cfg.dp:
+        	model = torch.nn.DataParallel(model)
 
         if cfg.mode == 'train':
             optimizer = get_optimizer(cfg, model)

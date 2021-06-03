@@ -14,6 +14,7 @@ from utils.config import cfg
 from utils.map_func import val_map
 from dataset.dataset import SIIMDataset
 from dataset.data_sampler import RandomSampler
+from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data import  DataLoader
 from torch.nn.parallel import DistributedDataParallel as NativeDDP
 import torch.nn.functional as F
@@ -146,7 +147,9 @@ def get_dataloader(cfg, fold_id):
     if cfg["distributed"]:
         torch.distributed.barrier()
 
-    sampler = RandomSampler(len(train_dataset), i=0, PARAMS=cfg)
+    # sampler = RandomSampler(len(train_dataset), i=0, PARAMS=cfg)
+    sampler = DistributedSampler(train_dataset)
+
     train_loader = DataLoader(train_dataset, batch_size=cfg.batch_size, shuffle=False,  sampler=sampler, num_workers=8, pin_memory=True)
 
 
@@ -159,7 +162,7 @@ def train_func(model, train_loader, scheduler, device):
     start_time = time.time()
     losses = []
     bar = tqdm(train_loader)
-    for batch_idx, (images, targets) in enumerate(bar):
+    for batch_idx, (images, targets, _) in enumerate(bar):
         if cfg["distributed"]:
             torch.distributed.barrier()
 
@@ -205,7 +208,7 @@ def valid_func(model, valid_loader):
 
     losses = []
     with torch.no_grad():
-        for batch_idx, (images, targets) in enumerate(bar):
+        for batch_idx, (images, targets, _) in enumerate(bar):
             images, targets = images.to(device), targets.to(device)
             logits = model(images)
 
@@ -331,6 +334,9 @@ if __name__ == "__main__":
             if scheduler is not None:
                 scheduler.load_state_dict(checkpoint["scheduler"])
 
+            del checkpoint
+            gc.collect()
+
         if cfg.neptune_project:
             with open('neptune_api.txt') as f:
                 token = f.read().strip()
@@ -347,7 +353,7 @@ if __name__ == "__main__":
             # loss_train = train_func(model, train_loader, scheduler, device)
             losses = []
             bar = tqdm(train_loader)
-            for batch_idx, (images, targets) in enumerate(bar):
+            for batch_idx, (images, targets, _) in enumerate(bar):
                 if cfg["distributed"]:
                     torch.distributed.barrier()
 
@@ -407,6 +413,9 @@ if __name__ == "__main__":
                 torch.save(checkpoint, f'{cfg.out_dir}/last_checkpoint_fold{fold_id}.pth')
 
                 logfile(f'[EPOCH {epoch}] micro f1 score: {micro_score}, macro_score f1 score: {macro_score}, val loss: {loss_valid}, AUC: {auc}, MAP: {map}')
+
+        del model, scheduler, optimizer
+        gc.collect()
 
         if cfg.neptune_project:
             neptune.stop()

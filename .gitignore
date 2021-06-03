@@ -6,3 +6,4 @@ detection/*cache
 detection/label*
 detection/*/runs/
 detection/*/__pycache__/
+*/__pycache__/
