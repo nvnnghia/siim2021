@@ -5,6 +5,16 @@ import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 from timm.models.layers.adaptive_avgmax_pool import SelectAdaptivePool2d
 from timm.models.resnet import Bottleneck
+from config import mixed_precision
+
+def conditional_decorator(dec, condition):
+    def decorator(func):
+        if not condition:
+            # Return the function unchanged, not decorated.
+            return func
+        return dec(func)
+
+    return 
 
 def gem(x, p=3, eps=1e-6):
     return F.avg_pool2d(x.clamp(min=eps).pow(p), (x.size(-2), x.size(-1))).pow(1. / p)
@@ -135,6 +145,7 @@ class SIIMModel(nn.Module):
             x4 = self.layer4(x3)
             return x2, x3, x4
 
+    @conditional_decorator(autocast(), mixed_precision)
     def forward(self, ipt):
         bs = ipt.size()[0]
 

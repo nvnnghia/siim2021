@@ -14,29 +14,49 @@ class ECANFNET(nn.Module):
         else:
             raise NotImplementedError(f"pooling type {pool} has not implemented!")
 
-        self.model = timm.create_model('nf_regnet_b1', pretrained=False)
-        print(self.model.stem)
-        # print(self.model.stages)
-        # print(dir(self.model.final_conv.out_channels))
-        print(self.model.stem[-1].out_channels)
-        self.model.head = nn.Identity()
+        self.model = timm.create_model('densenet121', pretrained=False)
 
-        self.fc = nn.Linear(self.model.final_conv.out_channels, out_dim)
+        # print(self.model)
+        # print(self.model.features.denseblock4)
+        # self.conv_stem = self.model.conv_stem
+        # self.bn1 = self.model.bn1
+        # self.act1 = self.model.act1
+        # ### Original blocks ###
+        # for i in range(len((self.model.blocks))):
+        #     setattr(self, "block{}".format(str(i)), self.model.blocks[i])
+        # self.conv_head = self.model.conv_head
+        # self.bn2 = self.model.bn2
+        # self.act2 = self.model.act2
+        # n_features = self.model.num_features
+        # self.bottleneck_b4 = Bottleneck(inplanes=self.block4[-1].bn3.num_features,
+        #                                 planes=int(self.block4[-1].bn3.num_features / 4))
+        # self.bottleneck_b5 = Bottleneck(inplanes=self.block5[-1].bn3.num_features,
+        #                                 planes=int(self.block5[-1].bn3.num_features / 4))
+        # self.fc_b4 = nn.Linear(self.block4[-1].bn3.num_features, out_dim)
+        # self.fc_b5 = nn.Linear(self.block5[-1].bn3.num_features, out_dim)
+
+        # print(self.model.global_pool)
+        # print(self.model)
+
+        self.model.global_pool = nn.Identity()
+        self.model.classifier = nn.Identity()
+
+        self.fc = nn.Linear(self.model.num_features, out_dim)
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
         bs = x.size(0)
         # features = self.model(x)
-        x = self.model.stem(x)
-        print(x.shape)
-        # x = self.model.stages(x)
-        for m in self.model.stages:
+        # x = self.model.stem(x)
+        # print(x.shape)
+        # # x = self.model.stages(x)
+        for m in self.model.features:
             # print(dir(m))
             x = m(x)
             print(x.shape)
-        x = self.model.final_conv(x)
-        # print(x.shape)
-        features = self.model.final_act(x)
+        # x = self.model.final_conv(x)
+        # # print(x.shape)
+        # features = self.model.final_act(x)
         # print(x.shape)
         # x = self.model.head(x)
         pooled_features = self.pooling(features).view(bs, -1)

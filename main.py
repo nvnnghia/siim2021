@@ -15,6 +15,7 @@ from utils.map_func import val_map
 from utils.evaluate import val
 from dataset.dataset import SIIMDataset
 from torch.utils.data import  DataLoader
+from torch.cuda.amp import GradScaler, autocast
 import torch.nn.functional as F
 from sklearn.metrics import f1_score
 from sklearn.metrics import accuracy_score, roc_auc_score
@@ -169,16 +170,22 @@ def train_func(model, train_loader, scheduler, device, epoch):
         else:
             images, targets, image_ids = batch_data
 
-        if cfg.use_seg:
-            prediction, seg_out = model(images.to(device))
+        if cfg["mixed_precision"]:
+            with autocast():
+                if cfg.use_seg:
+                    prediction, seg_out = model(images.to(device))
+                else:
+                    prediction = model(images.to(device))
         else:
-            prediction = model(images.to(device))
+            if cfg.use_seg:
+                prediction, seg_out = model(images.to(device))
+            else:
+                prediction = model(images.to(device))
 
 
         loss = criterion(prediction, targets.to(device))
 
         if cfg.use_seg:
-            # print(seg_out[:,0,:,:].shape, hms[:,:,:,0].shape)
             hm_loss = seg_criterion(seg_out[:,0,:,:], hms[:,:,:,0].to(device))
             
             ratio = sigmoid_rampup(epoch, cfg.epochs)
@@ -186,9 +193,17 @@ def train_func(model, train_loader, scheduler, device, epoch):
 
             loss += ratio*hm_loss
         
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
+        if cfg["mixed_precision"]:
+            scaler.scale(loss).backward()
+            if (batch_idx+1) % cfg.accumulation_steps ==0 :
+                scaler.unscale_(optimizer)
+                scaler.step(optimizer)
+                scaler.update()
+        else:
+            loss.backward()
+            if (batch_idx+1) % cfg.accumulation_steps ==0 :
+                optimizer.step()
+                optimizer.zero_grad()
 
         scheduler.step()
 
@@ -315,9 +330,12 @@ if __name__ == "__main__":
         total_steps = total_steps*cfg.epochs
         model = get_model(cfg).to(device)
 
-        if cfg.model == 'train':
+        if cfg.mode == 'train':
             optimizer = get_optimizer(cfg, model)
             scheduler = get_scheduler(cfg, optimizer, total_steps)
+
+            if cfg["mixed_precision"]:
+                scaler = GradScaler()
 
             if cfg.model in ['model_2']:
                 criterion = torch.nn.BCELoss()
@@ -332,6 +350,8 @@ if __name__ == "__main__":
                 checkpoint = torch.load(chpt_path, map_location="cpu")
                 model.load_state_dict(checkpoint["model"])
                 optimizer.load_state_dict(checkpoint["optimizer"])
+                if cfg["mixed_precision"]:
+                    scaler.load_state_dict(checkpoint["scaler"])
                 if scheduler is not None:
                     scheduler.load_state_dict(checkpoint["scheduler"])
 
@@ -339,7 +359,7 @@ if __name__ == "__main__":
                 gc.collect()
 
             if cfg.neptune_project:
-                with open('neptune_api.txt') as f:
+                with open('resources/neptune_api.txt') as f:
                     token = f.read().strip()
                 neptune.init(cfg.neptune_project, api_token = token)
                 neptune.create_experiment(name=cfg.name, params=cfg)
@@ -375,6 +395,9 @@ if __name__ == "__main__":
                     }
                     if scheduler is not None:
                         checkpoint["scheduler"] = scheduler.state_dict()
+
+                    if cfg["mixed_precision"]:
+                        checkpoint["scaler"] = scaler.state_dict()
 
                     torch.save(checkpoint, f'{cfg.out_dir}/last_checkpoint_fold{fold_id}.pth')
 

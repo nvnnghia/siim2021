@@ -14,10 +14,12 @@
 - [x] Validation metrics
 - [x] Resume training
 - [x] Neptune
+- [x] Gradient accumulation
 - [ ] Use NIH pretrained weights
 - [ ] Mixed_precision
 - [ ] Multi-gpu
 - [x] Auxilliary segmentation head
+- [ ] Multiple head
 - [ ] Traing and Test model
 
 

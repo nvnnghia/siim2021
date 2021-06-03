@@ -3,7 +3,18 @@ from torch import nn
 import timm
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
+# from utils.config import mixed_precision
+# from torch.cuda.amp import autocast
 
+# print('mixed_precision: ', mixed_precision)
+def conditional_decorator(dec, condition):
+    def decorator(func):
+        if not condition:
+            # Return the function unchanged, not decorated.
+            return func
+        return dec(func)
+
+    return 
 
 def gem(x, p=3, eps=1e-6):
     return F.avg_pool2d(x.clamp(min=eps).pow(p), (x.size(-2), x.size(-1))).pow(1. / p)
@@ -51,6 +62,10 @@ class SIIMModel(nn.Module):
         elif "nfnet" in model_name or "regnet" in model_name: 
             self.model.head = nn.Identity()
             n_features = self.model.final_conv.out_channels
+        elif 'densenet' in model_name:
+            self.model.global_pool = nn.Identity()
+            self.model.classifier = nn.Identity()
+            n_features = self.model.num_features
         else:
             raise NotImplementedError(f"model type {model_name} has not implemented!")
         
@@ -58,6 +73,7 @@ class SIIMModel(nn.Module):
         self.fc = nn.Linear(n_features, out_dim)
         self.dropout = nn.Dropout(dropout)
 
+    # @conditional_decorator(autocast(), mixed_precision)
     def forward(self, x):
         bs = x.size(0)
         features = self.model(x)
