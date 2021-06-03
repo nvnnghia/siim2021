@@ -48,7 +48,7 @@ class SIIMModel(nn.Module):
             self.model.global_pool = nn.Identity()
             self.model.classifier =  nn.Identity()
 
-        elif "nfnet" in model_name: 
+        elif "nfnet" in model_name or "regnet" in model_name: 
             self.model.head = nn.Identity()
             n_features = self.model.final_conv.out_channels
         else:

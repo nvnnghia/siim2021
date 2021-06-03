@@ -124,5 +124,5 @@ class SIIMDataset(Dataset):
             return img
         else:
             if self.cfg.use_seg:
-                return img, label, torch.from_numpy(hm)
-            return img, label
+                return img, label, row.id, torch.from_numpy(hm)
+            return img, label, row.id

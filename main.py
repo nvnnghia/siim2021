@@ -12,6 +12,7 @@ import albumentations
 from glob import glob
 from utils.config import cfg
 from utils.map_func import val_map
+from utils.evaluate import val
 from dataset.dataset import SIIMDataset
 from torch.utils.data import  DataLoader
 import torch.nn.functional as F
@@ -155,7 +156,7 @@ def get_dataloader(cfg, fold_id):
     val_dataset = SIIMDataset(val_df, tfms=transforms_valid, cfg=cfg)
     val_loader = DataLoader(val_dataset, batch_size=cfg.batch_size, shuffle=False,  num_workers=8, pin_memory=True)
 
-    return train_loader, val_loader, total_steps
+    return train_loader, val_loader, total_steps, val_df
 
 def train_func(model, train_loader, scheduler, device, epoch):
     model.train()
@@ -164,9 +165,9 @@ def train_func(model, train_loader, scheduler, device, epoch):
     bar = tqdm(train_loader)
     for batch_idx, batch_data in enumerate(bar):
         if cfg.use_seg:
-            images, targets, hms = batch_data
+            images, targets, image_ids, hms = batch_data
         else:
-            images, targets = batch_data
+            images, targets, image_ids = batch_data
 
         if cfg.use_seg:
             prediction, seg_out = model(images.to(device))
@@ -222,9 +223,9 @@ def valid_func(model, valid_loader):
     with torch.no_grad():
         for batch_idx, batch_data in enumerate(bar):
             if cfg.use_seg:
-                images, targets, hms = batch_data
+                images, targets, image_ids, hms = batch_data
             else:
-                images, targets = batch_data
+                images, targets, image_ids = batch_data
 
             images, targets = images.to(device), targets.to(device)
 
@@ -292,7 +293,7 @@ def valid_func(model, valid_loader):
         for cc, ap in enumerate(ap_list):
             neptune.log_metric(f'VAL map cls {cc}', ap)
 
-    return loss_valid, micro_score, macro_score, auc, map
+    return loss_valid, micro_score, macro_score, auc, map, pred_probs
 
 
 if __name__ == "__main__":
@@ -306,71 +307,115 @@ if __name__ == "__main__":
 
     copyfile(os.path.basename(__file__), os.path.join(cfg.out_dir, os.path.basename(__file__)))
 
-    for fold_id in cfg.folds:
+    oofs = []
+    for cc, fold_id in enumerate(cfg.folds):
         log_path = f'{cfg.out_dir}/log_f{fold_id}.txt'
-
-        train_loader, valid_loader, total_steps = get_dataloader(cfg, fold_id)
+        print(f'======== FOLD {fold_id} ========')
+        train_loader, valid_loader, total_steps, val_df = get_dataloader(cfg, fold_id)
         total_steps = total_steps*cfg.epochs
         model = get_model(cfg).to(device)
-        optimizer = get_optimizer(cfg, model)
-        scheduler = get_scheduler(cfg, optimizer, total_steps)
 
-        if cfg.model in ['model_2']:
-            criterion = torch.nn.BCELoss()
-        else:
-            criterion = torch.nn.BCEWithLogitsLoss()
+        if cfg.model == 'train':
+            optimizer = get_optimizer(cfg, model)
+            scheduler = get_scheduler(cfg, optimizer, total_steps)
 
-        if cfg.use_seg:
-            seg_criterion = torch.nn.MSELoss()
-
-        if cfg.resume_training:
-            chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}.pth'
-            checkpoint = torch.load(chpt_path, map_location="cpu")
-            model.load_state_dict(checkpoint["model"])
-            optimizer.load_state_dict(checkpoint["optimizer"])
-            if scheduler is not None:
-                scheduler.load_state_dict(checkpoint["scheduler"])
-
-        if cfg.neptune_project:
-            with open('neptune_api.txt') as f:
-                token = f.read().strip()
-            neptune.init(cfg.neptune_project, api_token = token)
-            neptune.create_experiment(name=cfg.name, params=cfg)
-            neptune.append_tag(cfg.model_architecture)
-            neptune.append_tag(f'fold {fold_id}')
-            neptune.append_tag(f'use_seg {cfg.use_seg}')
-            neptune.append_tag(f'{cfg.model}')
-
-        loss_min = 1e6
-        map_score_max = 0
-        for epoch in range(1, cfg.epochs+1):
-            logfile(f'====epoch {epoch} ====')
-            loss_train = train_func(model, train_loader, scheduler, device, epoch)
-            loss_valid, micro_score, macro_score, auc, map = valid_func(model, valid_loader)
-
-            if map > map_score_max:
-                logfile(f'map_score_max ({map_score_max:.6f} --> {map:.6f}). Saving model ...')
-                torch.save(model.state_dict(), f'{cfg.out_dir}/best_map_fold{fold_id}.pth')
-                map_score_max = map
-
-            if loss_valid < loss_min:
-                logfile(f'loss_min ({loss_min:.6f} --> {loss_valid:.6f}). Saving model ...')
-                loss_min = loss_valid
-                torch.save(model.state_dict(), f'{cfg.out_dir}/best_loss_fold{fold_id}.pth')
-
-            if epoch == cfg.epochs:
-                torch.save(model.state_dict(), f'{cfg.out_dir}/last_checkpoint_fold{fold_id}.pth')
+            if cfg.model in ['model_2']:
+                criterion = torch.nn.BCELoss()
             else:
-                checkpoint = {
-                    "model": model.state_dict(),
-                    "optimizer": optimizer.state_dict(),
-                }
+                criterion = torch.nn.BCEWithLogitsLoss()
+
+            if cfg.use_seg:
+                seg_criterion = torch.nn.MSELoss()
+
+            if cfg.resume_training:
+                chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}.pth'
+                checkpoint = torch.load(chpt_path, map_location="cpu")
+                model.load_state_dict(checkpoint["model"])
+                optimizer.load_state_dict(checkpoint["optimizer"])
                 if scheduler is not None:
-                    checkpoint["scheduler"] = scheduler.state_dict()
+                    scheduler.load_state_dict(checkpoint["scheduler"])
 
-                torch.save(checkpoint, f'{cfg.out_dir}/last_checkpoint_fold{fold_id}.pth')
+                del checkpoint
+                gc.collect()
 
-            logfile(f'[EPOCH {epoch}] micro f1 score: {micro_score}, macro_score f1 score: {macro_score}, val loss: {loss_valid}, AUC: {auc}, MAP: {map}')
+            if cfg.neptune_project:
+                with open('neptune_api.txt') as f:
+                    token = f.read().strip()
+                neptune.init(cfg.neptune_project, api_token = token)
+                neptune.create_experiment(name=cfg.name, params=cfg)
+                neptune.append_tag(cfg.model_architecture)
+                neptune.append_tag(f'fold {fold_id}')
+                neptune.append_tag(f'use_seg {cfg.use_seg}')
+                neptune.append_tag(f'{cfg.model}')
 
-        if cfg.neptune_project:
-            neptune.stop()
+        
+            loss_min = 1e6
+            map_score_max = 0
+            for epoch in range(1, cfg.epochs+1):
+                logfile(f'====epoch {epoch} ====')
+                loss_train = train_func(model, train_loader, scheduler, device, epoch)
+                loss_valid, micro_score, macro_score, auc, map, pred_probs = valid_func(model, valid_loader)
+
+                if map > map_score_max:
+                    logfile(f'map_score_max ({map_score_max:.6f} --> {map:.6f}). Saving model ...')
+                    torch.save(model.state_dict(), f'{cfg.out_dir}/best_map_fold{fold_id}.pth')
+                    map_score_max = map
+
+                if loss_valid < loss_min:
+                    logfile(f'loss_min ({loss_min:.6f} --> {loss_valid:.6f}). Saving model ...')
+                    loss_min = loss_valid
+                    torch.save(model.state_dict(), f'{cfg.out_dir}/best_loss_fold{fold_id}.pth')
+
+                if epoch == cfg.epochs:
+                    torch.save(model.state_dict(), f'{cfg.out_dir}/last_checkpoint_fold{fold_id}.pth')
+                else:
+                    checkpoint = {
+                        "model": model.state_dict(),
+                        "optimizer": optimizer.state_dict(),
+                    }
+                    if scheduler is not None:
+                        checkpoint["scheduler"] = scheduler.state_dict()
+
+                    torch.save(checkpoint, f'{cfg.out_dir}/last_checkpoint_fold{fold_id}.pth')
+
+                logfile(f'[EPOCH {epoch}] micro f1 score: {micro_score}, macro_score f1 score: {macro_score}, val loss: {loss_valid}, AUC: {auc}, MAP: {map}')
+
+            if cfg.neptune_project and cfg.mode == 'train':
+                neptune.stop()
+
+            del model, scheduler, optimizer
+            gc.collect()
+        elif cfg.mode == 'val':
+            # chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}.pth'
+            # chpt_path = f'{cfg.out_dir}/best_map_fold{fold_id}.pth'
+            chpt_path = f'{cfg.out_dir}/best_loss_fold{fold_id}.pth'
+            checkpoint = torch.load(chpt_path, map_location="cpu")
+            model.load_state_dict(checkpoint)
+            del checkpoint
+            gc.collect()
+
+            if cfg.model in ['model_2']:
+                criterion = torch.nn.BCELoss()
+            else:
+                criterion = torch.nn.BCEWithLogitsLoss()
+
+            loss_valid, micro_score, macro_score, auc, map, pred_probs = valid_func(model, valid_loader)
+            print(f'[FOLD {fold_id}] micro f1 score: {micro_score}, macro_score f1 score: {macro_score}, val loss: {loss_valid}, AUC: {auc}, MAP: {map}')
+
+            for i in range(pred_probs.shape[1]):
+                val_df[f'pred_cls{i+1}'] = pred_probs[:,i]
+
+            oofs.append(val_df)
+
+            if cc == (len(cfg.folds)-1):
+                oof_df = pd.concat(oofs)
+                val(oof_df)
+                oof_df.to_csv(f'{cfg.out_dir}/oofs.csv', index=False)
+
+            del model 
+            gc.collect()
+        else:
+            raise NotImplementedError(f"mode {cfg.mode} has not implemented!")
+
+
+        

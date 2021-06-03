@@ -3,7 +3,7 @@ from torch import nn
 import timm
 
 class ECANFNET(nn.Module):
-    def __init__(self, model_name='eca_nfnet_l1', out_dim=4, pretrained=False, dropout=0.5,
+    def __init__(self, model_name='nf_regnet_b1', out_dim=4, pretrained=False, dropout=0.5,
                  pool='AdaptiveAvgPool2d'):
         super().__init__()
 
@@ -14,7 +14,7 @@ class ECANFNET(nn.Module):
         else:
             raise NotImplementedError(f"pooling type {pool} has not implemented!")
 
-        self.model = timm.create_model('eca_nfnet_l1', pretrained=False)
+        self.model = timm.create_model('nf_regnet_b1', pretrained=False)
         print(self.model.stem)
         # print(self.model.stages)
         # print(dir(self.model.final_conv.out_channels))
