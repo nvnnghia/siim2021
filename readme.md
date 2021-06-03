@@ -16,7 +16,7 @@
 - [x] Neptune
 - [x] Gradient accumulation
 - [ ] Use NIH pretrained weights
-- [ ] Mixed_precision
+- [x] Mixed_precision
 - [ ] Multi-gpu
 - [x] Auxilliary segmentation head
 - [ ] Multiple head
@@ -41,3 +41,6 @@ nf_regnet_b1 | 2 | 0.555 | 0.554 | 0.802 | 1 | 384 | - | - | - | - | -
 nf_regnet_b1 | 3 | 0.557 | 0.555 | 0.806 | 1 | 384 | - | - | - | - | -
 nf_regnet_b1 | 4 | 0.546 | 0.544 | 0.800 | 1 | 384 | - | - | - | - | -
 nf_regnet_b1 | oof | 0.546 | x | 0.800 | 1 | 384 | 0.784 | 0.840 | 0.264 | 0.294 | -
+dm_nfnet_f1 | 0 | 0.574 | 0.555 | 0.813 | 1 | 384 | - | - | - | - | -
+dm_nfnet_f1 | 0 | 0.556 | 0.546 | 0.804 | 1 | 512 | - | - | - | - | -
+densenet121 | 0 | 0.532 | 0.532 | 0.784 | 1 | 384 | - | - | - | - | -

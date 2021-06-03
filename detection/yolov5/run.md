@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=0 python train.py --img-size 640 --epochs 100 --batch-size 8 --data data/cf1.yaml --cfg models/yolov5x_4cls.yaml --weights ../../../../yolov5/pretrained/yolov5x.pt --project runs/cf1
