@@ -50,7 +50,8 @@ densenet121 | 0 | 0.532 | 0.532 | 0.784 | 1 | 384 | - | - | - | - | -
 
 ### Progressive training
 * Use best loss checkpoint
-Model | FOLD | stage | mAP | AUC | model type | input size | cls1 | cls2 | cls3 | cls4 
+
+Model | FOLD | stage | mAP | AUC | model type | input size | cls1 | cls2 | cls3 | cls4 | #12
 --- | --- | --- | --- |--- |--- |--- |--- |--- |--- |--- |---
 eca_nfnet_l0 | 0 | 0 | 0.558 | 0.807 | 1 | 384 | - | - | - | - | -
 eca_nfnet_l0 | 1 | 0 | 0.564 | 0.803 | 1 | 384 | - | - | - | - | -
