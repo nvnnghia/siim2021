@@ -11,6 +11,8 @@ parser = argparse.ArgumentParser(description="")
 
 parser.add_argument("-C", "--config", help="config filename")
 parser.add_argument("-M", "--mode", default='train', help="mode type")
+parser.add_argument("-S", "--stage", default=0, help="stage")
+
 parser_args, _ = parser.parse_known_args(sys.argv)
 
 print("[ √ ] Using config file", parser_args.config)
@@ -27,3 +29,5 @@ cfg = DotDict(cfg)
 mixed_precision = cfg["mixed_precision"]
 
 cfg["mode"] = parser_args.mode
+cfg["seed"] += int(parser_args.stage)
+cfg["stage"] = int(parser_args.stage)

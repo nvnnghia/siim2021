@@ -36,7 +36,7 @@ from utils.torch_utils import ModelEMA, select_device, intersect_dicts, torch_di
 from utils.wandb_logging.wandb_utils import WandbLogger, check_wandb_resume
 import shutil 
 from madgrad import MADGRAD 
-from wrappedModels import SingleV5, V5Centernet
+from wrappedModels import SingleV5, V5Centernet, V5XCenternet
 from models.flexible import FlexibleModel
 
 

@@ -1,5 +1,5 @@
 # parameters
-nc: 10  # number of classes
+nc: 3  # number of classes
 depth_multiple: 1.33  # model depth multiple
 width_multiple: 1.25  # layer channel multiple
 

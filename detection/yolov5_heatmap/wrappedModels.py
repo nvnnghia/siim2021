@@ -120,6 +120,87 @@ class SingleV5(nn.Module):
         return x
 
 class V5Centernet(nn.Module):
+    def __init__(self, cfg, num_classes=14, pretrained=None, device='cpu', type='x'):
+        super().__init__()
+        self.model = Model(cfg, ch=3, nc=num_classes)
+        if pretrained:
+            # weights = torch.load(pretrained)
+            # self.model.load_state_dict(weights)
+            exclude = []  # exclude keys
+            ckpt = torch.load(pretrained, map_location=device)  # load checkpoint
+            state_dict = ckpt['model'].float().state_dict()  # to FP32
+            state_dict = intersect_dicts(state_dict, self.model.state_dict(), exclude=exclude)  # intersect
+            self.model.load_state_dict(state_dict, strict=False)  # load
+            print('Transferred %g/%g items from %s' % (len(state_dict), len(self.model.state_dict()), pretrained))  # report
+
+            del ckpt, state_dict
+
+        type = cfg.split('olov5')[-1][0]
+        if type == 'x':
+            channel_list = [1280, 640, 320, 160, 80]
+        elif type ==  'l':
+            pass
+        elif type == 'm':
+            channel_list = [768, 384, 192, 96, 48]
+        elif type == 's':
+            channel_list = [512, 256, 128, 64, 32]
+        else:
+            raise NotImplementedError(f"model type {type} has not implemented!")
+
+        #upsampling's head
+        self.center = nn.Sequential(
+            nn.Conv2d(channel_list[0], 512, kernel_size=11, padding=5, bias=False),
+            nn.BatchNorm2d(512),
+            nn.ReLU(inplace=True),
+        ).to(device)
+
+        self.decode1 = ResDecode(channel_list[1] + 512, 256).to(device) #layer11 9
+        self.decode2 = ResDecode(channel_list[2] + 256, 128).to(device) #layer8 6
+        self.decode3 = ResDecode(channel_list[3] + 128, 64).to(device) #layer6 4
+        self.decode4 = ResDecode(channel_list[4] + 64, 32).to(device) #layer3 2
+        self.decode5 = ResDecode(32, 16).to(device)  #layer2 0
+        self.logit = nn.Conv2d(16, 1, kernel_size=3, padding=1) #segmentation output
+
+    def forward(self, x, augment=False):
+        y, dt = [], []  # outputs
+
+        ipt = x.clone()
+        skip = []
+
+        for index, m in enumerate(self.model.model):
+            if m.f != -1:  # if not from previous layer
+                x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
+
+            x = m(x)  # run
+            y.append(x if m.i in self.model.save else None)  # save output
+
+            # if not isinstance(x, list):
+            #     print(index, x.shape)
+
+            if index in [0,2,4,6,9]:
+                skip.append(x)
+
+            if index==9:
+                z = self.center(skip[-1])
+                # print('z shape: ', z.shape)
+                z = self.decode1([skip[-2], resize_like(z, skip[-2])])  # ; print('d1',x.size())
+                # print('z shape: ', z.shape)
+                z = self.decode2([skip[-3], resize_like(z, skip[-3])])  # ; print('d2',x.size())
+                # print('z shape: ', z.shape)
+                z = self.decode3([skip[-4], resize_like(z, skip[-4])])  # ; print('d3',x.size())
+                # print('z shape: ', z.shape)
+                z = self.decode4([skip[-5], resize_like(z, skip[-5])])  # ; print('d4',x.size())
+                # print('z shape: ', z.shape)
+                z = self.decode5([resize_like(z, ipt)])
+                # print('z shape: ', z.shape)
+
+                seg_logit = self.logit(z)
+                # print('z shape: ', seg_logit.shape)
+
+        return x, seg_logit
+
+
+class V5XCenternet(nn.Module):
     def __init__(self, cfg, num_classes=14, pretrained=None, device='cpu'):
         super().__init__()
         self.model = Model(cfg, ch=3, nc=num_classes)
@@ -135,31 +216,22 @@ class V5Centernet(nn.Module):
 
             del ckpt, state_dict
 
+        # if
+
         #upsampling's head
         self.center = nn.Sequential(
-            nn.Conv2d(768, 512, kernel_size=11, padding=5, bias=False),
+            nn.Conv2d(1280, 512, kernel_size=11, padding=5, bias=False),
             nn.BatchNorm2d(512),
             nn.ReLU(inplace=True),
         ).to(device)
 
-        self.decode1 = ResDecode(384 + 512, 256).to(device) #layer11 9
-        self.decode2 = ResDecode(192 + 256, 128).to(device) #layer8 6
-        self.decode3 = ResDecode(96 + 128, 64).to(device) #layer6 4
-        self.decode4 = ResDecode(48 + 64, 32).to(device) #layer3 2
+        self.decode1 = ResDecode(640 + 512, 256).to(device) #layer11 9
+        self.decode2 = ResDecode(320 + 256, 128).to(device) #layer8 6
+        self.decode3 = ResDecode(160 + 128, 64).to(device) #layer6 4
+        self.decode4 = ResDecode(80 + 64, 32).to(device) #layer3 2
         self.decode5 = ResDecode(32, 16).to(device)  #layer2 0
         self.logit = nn.Conv2d(16, 1, kernel_size=3, padding=1) #segmentation output
 
-        # self.logit = nn.Sequential(
-        #             nn.Conv2d(16, 256,
-        #                       kernel_size=3, padding=1, bias=True),
-        #             nn.ReLU(inplace=True),
-        #             nn.Conv2d(256, 1,
-        #                       kernel_size=1, stride=1,
-        #                       padding=0, bias=True))
-        # self.logit[-1].bias.data.fill_(-2.19)
-
-
-        #~upsampling's head
 
 
     def forward(self, x, augment=False):

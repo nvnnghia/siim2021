@@ -107,7 +107,7 @@ def get_scheduler(cfg, optimizer, total_steps):
             num_training_steps=(total_steps // cfg["batch_size"]),
         )
 
-        print("num_steps", (total_steps // cfg["batch_size"]))
+        # print("num_steps", (total_steps // cfg["batch_size"]))
     elif cfg["scheduler"] == "onecycle":
         scheduler = optim.lr_scheduler.OneCycleLR(
             optimizer,
@@ -144,9 +144,15 @@ def get_dataloader(cfg, fold_id):
         # albumentations.Normalize()
     ])
 
-    df = pd.read_csv(cfg.train_csv_path)
+    if cfg.stage > 0:
+        df = pd.read_csv(f'{cfg.out_dir}/oofs{cfg.stage-1}.csv')
+    else:
+        df = pd.read_csv(cfg.train_csv_path)
     train_df = df[df['fold'] != fold_id]
     val_df = df[df['fold'] == fold_id]
+
+    if cfg.mode in ['pseudo']:
+        val_df = df
 
     if cfg.debug:
         train_df = train_df.head(100)
@@ -168,9 +174,9 @@ def train_func(model, train_loader, scheduler, device, epoch):
     bar = tqdm(train_loader)
     for batch_idx, batch_data in enumerate(bar):
         if cfg.use_seg:
-            images, targets, image_ids, hms = batch_data
+            images, targets, oof_targets, hms = batch_data
         else:
-            images, targets, image_ids = batch_data
+            images, targets, oof_targets = batch_data
 
         if cfg["mixed_precision"]:
             with autocast():
@@ -184,8 +190,11 @@ def train_func(model, train_loader, scheduler, device, epoch):
             else:
                 prediction = model(images.to(device))
 
-
         loss = criterion(prediction, targets.to(device))
+        if cfg.stage>0:
+            # loss += 0.5*criterion(prediction, oof_targets.to(device))
+            loss += 1*criterion(prediction, oof_targets.to(device))
+        
 
         if cfg.use_seg:
             hm_loss = seg_criterion(seg_out[:,0,:,:], hms[:,:,:,0].to(device))
@@ -268,17 +277,10 @@ def valid_func(model, valid_loader):
             pred_results.append(pred_labels)
             origin_labels.append(targets.detach().cpu().numpy())
 
-            if cfg.use_seg:
-                hm_loss = seg_criterion(seg_out, hms.to(device))
-                loss += 5*hm_loss
-
             losses.append(loss.item())
             smooth_loss = np.mean(losses[-30:])
 
-            if cfg.use_seg:
-                bar.set_description(f'loss: {loss.item():.5f}, hm_loss: {hm_loss.item():.5f}, smth: {smooth_loss:.5f}')
-            else:
-                bar.set_description(f'loss: {loss.item():.5f}, smth: {smooth_loss:.5f}')
+            bar.set_description(f'loss: {loss.item():.5f}, smth: {smooth_loss:.5f}')
 
             if batch_idx>30 and cfg.debug:
                 break
@@ -302,7 +304,7 @@ def valid_func(model, valid_loader):
 
     map, ap_list = val_map(origin_labels, pred_probs)
 
-    if cfg.neptune_project:
+    if cfg.neptune_project and cfg.mode == 'train':
         neptune.log_metric('VAL loss', loss_valid)
         neptune.log_metric('VAL micro f1 score', micro_score)
         neptune.log_metric('VAL macro f1 score', macro_score)
@@ -327,16 +329,16 @@ if __name__ == "__main__":
 
     oofs = []
     for cc, fold_id in enumerate(cfg.folds):
-        log_path = f'{cfg.out_dir}/log_f{fold_id}.txt'
-        print(f'======== FOLD {fold_id} ========')
+        log_path = f'{cfg.out_dir}/log_f{fold_id}_st{cfg.stage}.txt'
         train_loader, valid_loader, total_steps, val_df = get_dataloader(cfg, fold_id)
         total_steps = total_steps*cfg.epochs
-        model = get_model(cfg).to(device)
-
+        print(f'======== FOLD {fold_id} ========')
         if cfg.dp:
         	model = torch.nn.DataParallel(model)
 
         if cfg.mode == 'train':
+            logfile(f'======= STAGE {cfg.stage} =========')
+            model = get_model(cfg).to(device)
             optimizer = get_optimizer(cfg, model)
             scheduler = get_scheduler(cfg, optimizer, total_steps)
 
@@ -352,7 +354,7 @@ if __name__ == "__main__":
                 seg_criterion = torch.nn.MSELoss()
 
             if cfg.resume_training:
-                chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}.pth'
+                chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth'
                 checkpoint = torch.load(chpt_path, map_location="cpu")
                 model.load_state_dict(checkpoint["model"])
                 optimizer.load_state_dict(checkpoint["optimizer"])
@@ -384,16 +386,16 @@ if __name__ == "__main__":
 
                 if map > map_score_max:
                     logfile(f'map_score_max ({map_score_max:.6f} --> {map:.6f}). Saving model ...')
-                    torch.save(model.state_dict(), f'{cfg.out_dir}/best_map_fold{fold_id}.pth')
+                    torch.save(model.state_dict(), f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth')
                     map_score_max = map
 
                 if loss_valid < loss_min:
                     logfile(f'loss_min ({loss_min:.6f} --> {loss_valid:.6f}). Saving model ...')
                     loss_min = loss_valid
-                    torch.save(model.state_dict(), f'{cfg.out_dir}/best_loss_fold{fold_id}.pth')
+                    torch.save(model.state_dict(), f'{cfg.out_dir}/best_loss_fold{fold_id}_st{cfg.stage}.pth')
 
                 if epoch == cfg.epochs:
-                    torch.save(model.state_dict(), f'{cfg.out_dir}/last_checkpoint_fold{fold_id}.pth')
+                    torch.save(model.state_dict(), f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth')
                 else:
                     checkpoint = {
                         "model": model.state_dict(),
@@ -405,7 +407,7 @@ if __name__ == "__main__":
                     if cfg["mixed_precision"]:
                         checkpoint["scaler"] = scaler.state_dict()
 
-                    torch.save(checkpoint, f'{cfg.out_dir}/last_checkpoint_fold{fold_id}.pth')
+                    torch.save(checkpoint, f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth')
 
                 logfile(f'[EPOCH {epoch}] micro f1 score: {micro_score}, macro_score f1 score: {macro_score}, val loss: {loss_valid}, AUC: {auc}, MAP: {map}')
 
@@ -414,10 +416,12 @@ if __name__ == "__main__":
 
             del model, scheduler, optimizer
             gc.collect()
-        elif cfg.mode == 'val':
-            # chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}.pth'
-            # chpt_path = f'{cfg.out_dir}/best_map_fold{fold_id}.pth'
-            chpt_path = f'{cfg.out_dir}/best_loss_fold{fold_id}.pth'
+        # elif cfg.mode == 'val':
+        if cfg.mode in['train', 'val']:
+            model = get_model(cfg).to(device)
+            # chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth'
+            # chpt_path = f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth'
+            chpt_path = f'{cfg.out_dir}/best_loss_fold{fold_id}_st{cfg.stage}.pth'
             checkpoint = torch.load(chpt_path, map_location="cpu")
             model.load_state_dict(checkpoint)
             del checkpoint
@@ -439,7 +443,39 @@ if __name__ == "__main__":
             if cc == (len(cfg.folds)-1):
                 oof_df = pd.concat(oofs)
                 val(oof_df)
-                oof_df.to_csv(f'{cfg.out_dir}/oofs.csv', index=False)
+                oof_df.to_csv(f'{cfg.out_dir}/oofs{cfg.stage}.csv', index=False)
+
+            del model 
+            gc.collect()
+        elif cfg.mode in ['pseudo']:
+            model = get_model(cfg).to(device)
+            # chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth'
+            # chpt_path = f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth'
+            chpt_path = f'{cfg.out_dir}/best_loss_fold{fold_id}_st{cfg.stage}.pth'
+            checkpoint = torch.load(chpt_path, map_location="cpu")
+            model.load_state_dict(checkpoint)
+            del checkpoint
+            gc.collect()
+
+            if cfg.model in ['model_2']:
+                criterion = torch.nn.BCELoss()
+            else:
+                criterion = torch.nn.BCEWithLogitsLoss()
+
+            loss_valid, micro_score, macro_score, auc, map, pred_probs = valid_func(model, valid_loader)
+            print(f'[FOLD {fold_id}] micro f1 score: {micro_score}, macro_score f1 score: {macro_score}, val loss: {loss_valid}, AUC: {auc}, MAP: {map}')
+
+            if cc ==0:
+                pred_probs_all = pred_probs
+            else:
+                pred_probs_all += pred_probs
+            if cc == (len(cfg.folds)-1):
+                pred_probs_all /=len(cfg.folds)
+                for i in range(pred_probs_all.shape[1]):
+                    val_df[f'pred_cls{i+1}'] = pred_probs_all[:,i]
+
+                val(val_df)
+                val_df.to_csv(f'{cfg.out_dir}/pseudo_st{cfg.stage}.csv', index=False)
 
             del model 
             gc.collect()
@@ -447,4 +483,4 @@ if __name__ == "__main__":
             raise NotImplementedError(f"mode {cfg.mode} has not implemented!")
 
 
-        
+

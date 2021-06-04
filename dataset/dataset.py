@@ -73,6 +73,8 @@ class SIIMDataset(Dataset):
         self.transform = tfms
 
         self.labels = self.df.targets.values
+        if cfg.stage > 0:
+            self.oof_labels = self.df[['pred_cls1', 'pred_cls2', 'pred_cls3' ,'pred_cls4']].values
         self.cfg = cfg
         self.tensor_tfms = Compose([
             ToTensor(),
@@ -119,10 +121,15 @@ class SIIMDataset(Dataset):
         label = torch.zeros(self.cfg.output_size)
         label[self.labels[index]-1] = 1
 
+        oof_label = torch.zeros(self.cfg.output_size)
+        if self.cfg.stage>0:
+            oof_label = torch.tensor(self.oof_labels[index])
+
+
         img = self.tensor_tfms(img)
         if self.mode == 'test':
             return img
         else:
             if self.cfg.use_seg:
-                return img, label, row.id, torch.from_numpy(hm)
-            return img, label, row.id
+                return img, label, oof_label, torch.from_numpy(hm)
+            return img, label, oof_label
