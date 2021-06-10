@@ -131,5 +131,5 @@ class SIIMDataset(Dataset):
             return img
         else:
             if self.cfg.use_seg:
-                return img, label, oof_label, torch.from_numpy(hm)
-            return img, label, oof_label
+                return img, label, oof_label, torch.tensor(self.labels[index]-1), torch.from_numpy(hm)
+            return img, label, oof_label, torch.tensor(self.labels[index]-1)

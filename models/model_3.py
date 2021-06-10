@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 from timm.models.layers.adaptive_avgmax_pool import SelectAdaptivePool2d
 from timm.models.resnet import Bottleneck
+import typing as tp
 # from config import mixed_precision
 
 # def conditional_decorator(dec, condition):
@@ -15,6 +16,94 @@ from timm.models.resnet import Bottleneck
 #         return dec(func)
 
 #     return 
+def get_activation(activ_name: str="relu"):
+    """"""
+    act_dict = {
+        "relu": nn.ReLU(inplace=True),
+        "tanh": nn.Tanh(),
+        "sigmoid": nn.Sigmoid(),
+        "identity": nn.Identity()}
+    if activ_name in act_dict:
+        return act_dict[activ_name]
+    else:
+        raise NotImplementedError
+        
+
+class Conv2dBNActiv(nn.Module):
+    """Conv2d -> (BN ->) -> Activation"""
+    
+    def __init__(
+        self, in_channels: int, out_channels: int,
+        kernel_size: int, stride: int=1, padding: int=0,
+        bias: bool=False, use_bn: bool=True, activ: str="relu"
+    ):
+        """"""
+        super(Conv2dBNActiv, self).__init__()
+        layers = []
+        layers.append(nn.Conv2d(
+            in_channels, out_channels,
+            kernel_size, stride, padding, bias=bias))
+        if use_bn:
+            layers.append(nn.BatchNorm2d(out_channels))
+            
+        layers.append(get_activation(activ))
+        self.layers = nn.Sequential(*layers)
+        
+    def forward(self, x):
+        """Forward"""
+        return self.layers(x)
+        
+
+class SSEBlock(nn.Module):
+    """channel `S`queeze and `s`patial `E`xcitation Block."""
+
+    def __init__(self, in_channels: int):
+        """Initialize."""
+        super(SSEBlock, self).__init__()
+        self.channel_squeeze = nn.Conv2d(
+            in_channels=in_channels, out_channels=1,
+            kernel_size=1, stride=1, padding=0, bias=False)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        """Forward."""
+        # # x: (bs, ch, h, w) => h: (bs, 1, h, w)
+        h = self.sigmoid(self.channel_squeeze(x))
+        # # x, h => return: (bs, ch, h, w)
+        return x * h
+    
+    
+class SpatialAttentionBlock(nn.Module):
+    """Spatial Attention for (C, H, W) feature maps"""
+    
+    def __init__(
+        self, in_channels: int,
+        out_channels_list: tp.List[int],
+    ):
+        """Initialize"""
+        super(SpatialAttentionBlock, self).__init__()
+        self.n_layers = len(out_channels_list)
+        channels_list = [in_channels] + out_channels_list
+        assert self.n_layers > 0
+        assert channels_list[-1] == 1
+        
+        for i in range(self.n_layers - 1):
+            in_chs, out_chs = channels_list[i: i + 2]
+            layer = Conv2dBNActiv(in_chs, out_chs, 3, 1, 1, activ="relu")
+            setattr(self, f"conv{i + 1}", layer)
+            
+        in_chs, out_chs = channels_list[-2:]
+        layer = Conv2dBNActiv(in_chs, out_chs, 3, 1, 1, activ="sigmoid")
+        setattr(self, f"conv{self.n_layers}", layer)
+    
+    def forward(self, x):
+        """Forward"""
+        h = x
+        for i in range(self.n_layers):
+            h = getattr(self, f"conv{i + 1}")(h)
+            
+        h = h * x
+        return h
 
 def gem(x, p=3, eps=1e-6):
     return F.avg_pool2d(x.clamp(min=eps).pow(p), (x.size(-2), x.size(-1))).pow(1. / p)
@@ -96,8 +185,21 @@ class SIIMModel(nn.Module):
             raise NotImplementedError(f"model type {model_name} has not implemented!")
         
 
-        self.fc = nn.Linear(n_features, out_dim)
-        self.dropout = nn.Dropout(dropout)
+        # self.fc = nn.Linear(n_features, out_dim)
+        # self.dropout = nn.Dropout(dropout)
+        self.n_heads = out_dim
+
+        for i, dim in enumerate([1,1,1,1]):
+            layer_name = f"head_{i}"
+            layer = nn.Sequential(
+                SpatialAttentionBlock(n_features, [64, 32, 16, 1]),
+                nn.AdaptiveAvgPool2d(output_size=1),
+                nn.Flatten(start_dim=1),
+                nn.Linear(n_features, n_features),
+                nn.ReLU(inplace=True),
+                nn.Dropout(dropout),
+                nn.Linear(n_features, dim))
+            setattr(self, layer_name, layer)
 
 
     def layer0(self, x):
@@ -170,14 +272,19 @@ class SIIMModel(nn.Module):
 
         x2, x3, x4 = self._features(ipt)
         # print(x0.shape, x1.shape, x2.shape, x3.shape, x4.shape)
-        b5_logits = self.fc_b5(torch.flatten(self.global_pool(self.bottleneck_b5(x3)), 1))
+        # b5_logits = self.fc_b5(torch.flatten(self.global_pool(self.bottleneck_b5(x3)), 1))
 
-        pooled_features = self.pooling(x4).view(bs, -1)
-        cls_logit = self.fc(self.dropout(pooled_features))
+        # pooled_features = self.pooling(x4).view(bs, -1)
+        # cls_logit = self.fc(self.dropout(pooled_features))
 
-        cls_logit = (torch.sigmoid(cls_logit) + torch.sigmoid(b5_logits)) / 2.
+        # cls_logit = (torch.sigmoid(cls_logit) + torch.sigmoid(b5_logits)) / 2.
 
-        return cls_logit
+        hs = [
+            getattr(self, f"head_{i}")(x4) for i in range(self.n_heads)]
+        y = torch.cat(hs, axis=1)
+        return y
+
+        # return cls_logit
 
     @property
     def net(self):

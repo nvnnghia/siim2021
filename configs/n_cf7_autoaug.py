@@ -13,7 +13,7 @@ cfg = {
     "use_seg":False,
     "out_dir": f"{outputdir}",
     "folds": [0, 1, 2, 3, 4],
-    "augmentation": "s_0220/0220_hf_cut_sm2_0.75_384.yaml",
+    "augmentation": "epoch_8.json",
     "weight_file": None,  # "/model_state_45000.pth",
     "resume_training": False,
     "dropout": 0.5,
@@ -34,6 +34,6 @@ cfg = {
     "model": "model_1",
     "epochs": 15,
     "mode": "train",
-    "loss": 'bce',
+    "ema": 0,
 }
 

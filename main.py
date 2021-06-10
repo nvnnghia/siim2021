@@ -18,7 +18,7 @@ from torch.utils.data import  DataLoader
 from torch.cuda.amp import GradScaler, autocast
 import torch.nn.functional as F
 from sklearn.metrics import f1_score
-from sklearn.metrics import accuracy_score, roc_auc_score
+from sklearn.metrics import accuracy_score, roc_auc_score, average_precision_score
 from transformers import get_cosine_schedule_with_warmup, get_linear_schedule_with_warmup
 
 from utils.parallel import DataParallelModel, DataParallelCriterion
@@ -129,7 +129,10 @@ def get_scheduler(cfg, optimizer, total_steps):
 def get_dataloader(cfg, fold_id):
     if cfg.augmentation:
         print("[ √ ] Using augmentation file", f'configs/aug/{cfg.augmentation}')
-        transforms_train = albumentations.load(f'configs/aug/{cfg.augmentation}', data_format='yaml')
+        if 'yaml' in cfg.augmentation:
+            transforms_train = albumentations.load(f'configs/aug/{cfg.augmentation}', data_format='yaml')
+        else:
+            transforms_train = albumentations.load(f'configs/aug/{cfg.augmentation}', data_format='json')
     else:
         transforms_train = albumentations.Compose([
             albumentations.Resize(cfg.input_size, cfg.input_size),
@@ -162,7 +165,7 @@ def get_dataloader(cfg, fold_id):
     train_loader = DataLoader(train_dataset, batch_size=cfg.batch_size, shuffle=True,  num_workers=8, pin_memory=True)
     total_steps = len(train_dataset)
 
-    val_dataset = SIIMDataset(val_df, tfms=transforms_valid, cfg=cfg)
+    val_dataset = SIIMDataset(val_df, tfms=transforms_valid, cfg=cfg, mode='val')
     val_loader = DataLoader(val_dataset, batch_size=cfg.batch_size, shuffle=False,  num_workers=8, pin_memory=True)
 
     return train_loader, val_loader, total_steps, val_df
@@ -174,9 +177,9 @@ def train_func(model, train_loader, scheduler, device, epoch):
     bar = tqdm(train_loader)
     for batch_idx, batch_data in enumerate(bar):
         if cfg.use_seg:
-            images, targets, oof_targets, hms = batch_data
+            images, targets, oof_targets, targets1, hms = batch_data
         else:
-            images, targets, oof_targets = batch_data
+            images, targets, oof_targets, targets1 = batch_data
 
         if cfg["mixed_precision"]:
             with autocast():
@@ -190,10 +193,16 @@ def train_func(model, train_loader, scheduler, device, epoch):
             else:
                 prediction = model(images.to(device))
 
-        loss = criterion(prediction, targets.to(device))
+        if cfg.loss == 'ce':
+            loss = ce_criterion(prediction, targets1.to(device))
+        elif cfg.loss == 'bce':
+            loss = criterion(prediction, targets.to(device))
+        else:
+            loss = 0.2*ce_criterion(prediction1, targets1.to(device)) + 0.5*criterion(prediction, targets.to(device))
+
         if cfg.stage>0:
             # loss += 0.5*criterion(prediction, oof_targets.to(device))
-            loss += 1*criterion(prediction, oof_targets.to(device))
+            loss = (loss + cfg.stage*criterion(prediction, oof_targets.float().to(device)))/(1+cfg.stage)
         
 
         if cfg.use_seg:
@@ -249,23 +258,35 @@ def valid_func(model, valid_loader):
     with torch.no_grad():
         for batch_idx, batch_data in enumerate(bar):
             if cfg.use_seg:
-                images, targets, image_ids, hms = batch_data
+                images, targets, image_ids, targets1, hms = batch_data
             else:
-                images, targets, image_ids = batch_data
+                images, targets, image_ids, targets1 = batch_data
 
             images, targets = images.to(device), targets.to(device)
+            origin_labels.append(targets.detach().cpu().numpy())
+
 
             if cfg.use_seg:
                 logits, seg_out = model(images)
             else:
                 logits = model(images)
 
-            loss = criterion(logits, targets)
+            if cfg.loss == 'ce':
+                loss = ce_criterion(logits, targets1.to(device))
+            elif cfg.loss == 'bce':
+                loss = criterion(logits, targets)
+            else:
+                loss = 0.2*ce_criterion(logits1, targets1.to(device)) + 0.5*criterion(logits, targets)
 
             if cfg.model in ['model_2']: #use bceloss
                 prediction = logits
             else:
-                prediction = F.sigmoid(logits)
+                if cfg.loss == 'bce':
+                    prediction = F.sigmoid(logits)
+                elif cfg.loss == 'ce':
+                    prediction = F.softmax(logits)
+                else:
+                    prediction = 0.5*F.sigmoid(logits) + 0.5*F.softmax(logits1)
 
             proba = prediction.detach().cpu().numpy()
 
@@ -275,7 +296,7 @@ def valid_func(model, valid_loader):
             pred_labels = events.astype(np.int)
             
             pred_results.append(pred_labels)
-            origin_labels.append(targets.detach().cpu().numpy())
+            
 
             losses.append(loss.item())
             smooth_loss = np.mean(losses[-30:])
@@ -290,10 +311,14 @@ def valid_func(model, valid_loader):
     pred_probs = np.concatenate(pred_probs)
 
     aucs = []
+    acc = []
     for i in range(4):
         aucs.append(roc_auc_score(origin_labels[:, i], pred_probs[:, i]))
+        acc.append(average_precision_score(origin_labels[:, i], pred_probs[:, i]))
 
-    print(np.round(aucs, 4))
+    # print(np.round(aucs, 4))
+    print("AUC list: ", np.round(aucs, 4), 'mean: ', np.mean(aucs))
+    print("ACC list: ", np.round(acc, 4), 'mean: ', np.mean(acc))
 
     micro_score = f1_score(origin_labels, pred_results, average='micro')
     macro_score = f1_score(origin_labels, pred_results, average='macro')
@@ -314,7 +339,6 @@ def valid_func(model, valid_loader):
             neptune.log_metric(f'VAL map cls {cc}', ap)
 
     return loss_valid, micro_score, macro_score, auc, map, pred_probs
-
 
 if __name__ == "__main__":
     set_seed(cfg["seed"])
@@ -349,6 +373,8 @@ if __name__ == "__main__":
                 criterion = torch.nn.BCELoss()
             else:
                 criterion = torch.nn.BCEWithLogitsLoss()
+                
+            ce_criterion = torch.nn.CrossEntropyLoss()
 
             if cfg.use_seg:
                 seg_criterion = torch.nn.MSELoss()
@@ -386,16 +412,25 @@ if __name__ == "__main__":
 
                 if map > map_score_max:
                     logfile(f'map_score_max ({map_score_max:.6f} --> {map:.6f}). Saving model ...')
-                    torch.save(model.state_dict(), f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth')
+                    if cfg.use_seg:
+                        torch.save(model.model.state_dict(), f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth')
+                    else:
+                        torch.save(model.state_dict(), f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth')
                     map_score_max = map
 
                 if loss_valid < loss_min:
                     logfile(f'loss_min ({loss_min:.6f} --> {loss_valid:.6f}). Saving model ...')
                     loss_min = loss_valid
-                    torch.save(model.state_dict(), f'{cfg.out_dir}/best_loss_fold{fold_id}_st{cfg.stage}.pth')
+                    if cfg.use_seg:
+                        torch.save(model.model.state_dict(), f'{cfg.out_dir}/best_loss_fold{fold_id}_st{cfg.stage}.pth')
+                    else:
+                        torch.save(model.state_dict(), f'{cfg.out_dir}/best_loss_fold{fold_id}_st{cfg.stage}.pth')
 
                 if epoch == cfg.epochs:
-                    torch.save(model.state_dict(), f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth')
+                    if cfg.use_seg:
+                        torch.save(model.model.state_dict(), f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth')
+                    else:
+                        torch.save(model.state_dict(), f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth')
                 else:
                     checkpoint = {
                         "model": model.state_dict(),
@@ -420,10 +455,13 @@ if __name__ == "__main__":
         if cfg.mode in['train', 'val']:
             model = get_model(cfg).to(device)
             # chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth'
-            # chpt_path = f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth'
-            chpt_path = f'{cfg.out_dir}/best_loss_fold{fold_id}_st{cfg.stage}.pth'
+            chpt_path = f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth'
+            # chpt_path = f'{cfg.out_dir}/best_loss_fold{fold_id}_st{cfg.stage}.pth'
             checkpoint = torch.load(chpt_path, map_location="cpu")
-            model.load_state_dict(checkpoint)
+            if cfg.use_seg:
+                model.model.load_state_dict(checkpoint)
+            else:
+                model.load_state_dict(checkpoint)
             del checkpoint
             gc.collect()
 
@@ -431,6 +469,7 @@ if __name__ == "__main__":
                 criterion = torch.nn.BCELoss()
             else:
                 criterion = torch.nn.BCEWithLogitsLoss()
+            ce_criterion = torch.nn.CrossEntropyLoss()
 
             loss_valid, micro_score, macro_score, auc, map, pred_probs = valid_func(model, valid_loader)
             print(f'[FOLD {fold_id}] micro f1 score: {micro_score}, macro_score f1 score: {macro_score}, val loss: {loss_valid}, AUC: {auc}, MAP: {map}')
@@ -450,10 +489,13 @@ if __name__ == "__main__":
         elif cfg.mode in ['pseudo']:
             model = get_model(cfg).to(device)
             # chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth'
-            # chpt_path = f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth'
-            chpt_path = f'{cfg.out_dir}/best_loss_fold{fold_id}_st{cfg.stage}.pth'
+            chpt_path = f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth'
+            # chpt_path = f'{cfg.out_dir}/best_loss_fold{fold_id}_st{cfg.stage}.pth'
             checkpoint = torch.load(chpt_path, map_location="cpu")
-            model.load_state_dict(checkpoint)
+            if cfg.use_seg:
+                model.model.load_state_dict(checkpoint)
+            else:
+                model.load_state_dict(checkpoint)
             del checkpoint
             gc.collect()
 

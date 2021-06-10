@@ -31,7 +31,7 @@ cfg = {
     "neptune_project": None,  
     # "neptune_project": "nvnn/siim2021",
     "scheduler": "cosine", #linear  cosine
-    "model": "model_1",
+    "model": "model_4",
     "epochs": 15,
     "mode": "train",
     "loss": 'bce',

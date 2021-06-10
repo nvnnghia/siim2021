@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 from timm.models.layers.adaptive_avgmax_pool import SelectAdaptivePool2d
 from timm.models.resnet import Bottleneck
+import gc 
 
 def gem(x, p=3, eps=1e-6):
     return F.avg_pool2d(x.clamp(min=eps).pow(p), (x.size(-2), x.size(-1))).pow(1. / p)
@@ -99,8 +100,8 @@ class ResDecode(nn.Module):
         x = self.attent2(x)
         return x
 
-class SIIMModel(nn.Module):
-    def __init__(self, model_name='resnet200d', out_dim=4, pretrained=False, dropout=0.5,
+class BaseModel(nn.Module):
+    def __init__(self,model_name='resnet200d', out_dim=4, pretrained=False, dropout=0.5,
                  pool='AdaptiveAvgPool2d'):
         super().__init__()
         self.model = timm.create_model(model_name, pretrained=pretrained)
@@ -117,7 +118,7 @@ class SIIMModel(nn.Module):
             n_features = self.model.fc.in_features
             self.model.global_pool = nn.Identity()
             self.model.fc = nn.Identity()
-            feats_list = [n_features, self.model.layer3[-1].bn3.num_features, self.model.layer2[-1].bn3.num_features, self.model.layer1[-1].bn3.num_features, self.model.conv1[-1].out_channels]
+            self.feats_list = [n_features, self.model.layer3[-1].bn3.num_features, self.model.layer2[-1].bn3.num_features, self.model.layer1[-1].bn3.num_features, self.model.conv1[-1].out_channels]
         elif "efficientnet" in model_name: 
             self.conv_stem = self.model.conv_stem
             self.bn1 = self.model.bn1
@@ -137,13 +138,13 @@ class SIIMModel(nn.Module):
             self.fc_b4 = nn.Linear(self.block4[-1].bn3.num_features, out_dim)
             self.fc_b5 = nn.Linear(self.block5[-1].bn3.num_features, out_dim)
 
-            feats_list = [n_features, self.block4[-1].bn3.num_features, self.block2[-1].bn3.num_features, self.block1[-1].bn3.num_features, self.block0[-1].bn2.num_features]
+            self.feats_list = [n_features, self.block4[-1].bn3.num_features, self.block2[-1].bn3.num_features, self.block1[-1].bn3.num_features, self.block0[-1].bn2.num_features]
 
             del self.model
         elif "nfnet" in model_name: 
             self.model.head = nn.Identity()
             n_features = self.model.final_conv.out_channels
-            feats_list = [n_features, self.model.stages[-2][-1].conv3.out_channels, self.model.stages[-3][-1].conv3.out_channels, self.model.stages[-4][-1].conv3.out_channels, self.model.stem[-1].out_channels]
+            self.feats_list = [n_features, self.model.stages[-2][-1].conv3.out_channels, self.model.stages[-3][-1].conv3.out_channels, self.model.stages[-4][-1].conv3.out_channels, self.model.stem[-1].out_channels]
         else:
             raise NotImplementedError(f"model type {model_name} has not implemented!")
 
@@ -151,21 +152,6 @@ class SIIMModel(nn.Module):
 
         self.fc = nn.Linear(n_features, out_dim)
         self.dropout = nn.Dropout(dropout)
-
-        self.center = nn.Sequential(
-            nn.Conv2d(n_features, 512, kernel_size=11, padding=5, bias=False),
-            nn.BatchNorm2d(512),
-            nn.ReLU(inplace=True),
-        )
-
-        self.decode1 = ResDecode(feats_list[1] + 512, 256)
-        self.decode2 = ResDecode(feats_list[2] + 256, 128)
-        self.decode3 = ResDecode(feats_list[3] + 128, 64)
-        self.decode4 = ResDecode(feats_list[4] + 64, 32)
-        self.decode5 = ResDecode(32, 16)
-
-        self.logit = nn.Conv2d(16, 1, kernel_size=3, padding=1)
-
 
     def layer0(self, x):
         x = self.model.conv1(x)
@@ -231,10 +217,32 @@ class SIIMModel(nn.Module):
 
             return feats[0], feats[1], feats[2], feats[3], features
 
+class SIIMModel(nn.Module):
+    def __init__(self, model_name='resnet200d', out_dim=4, pretrained=False, dropout=0.5,
+                 pool='AdaptiveAvgPool2d'):
+        super().__init__()
+        self.model = BaseModel(model_name=model_name, out_dim=out_dim, pretrained=pretrained, dropout=dropout, pool=pool)
+
+        feats_list = self.model.feats_list
+
+        self.center = nn.Sequential(
+            nn.Conv2d(feats_list[0], 512, kernel_size=11, padding=5, bias=False),
+            nn.BatchNorm2d(512),
+            nn.ReLU(inplace=True),
+        )
+
+        self.decode1 = ResDecode(feats_list[1] + 512, 256)
+        self.decode2 = ResDecode(feats_list[2] + 256, 128)
+        self.decode3 = ResDecode(feats_list[3] + 128, 64)
+        self.decode4 = ResDecode(feats_list[4] + 64, 32)
+        self.decode5 = ResDecode(32, 16)
+
+        self.logit = nn.Conv2d(16, 1, kernel_size=3, padding=1)
+
     def forward(self, ipt):
         bs = ipt.size()[0]
 
-        x0, x1, x2, x3, x4 = self._features(ipt)
+        x0, x1, x2, x3, x4 = self.model._features(ipt)
         # print(x0.shape, x1.shape, x2.shape, x3.shape, x4.shape)
 
         skip = [x0, x1, x2, x3]
@@ -248,10 +256,16 @@ class SIIMModel(nn.Module):
         seg_logit = self.logit(z)
         #print('seg_logit',seg_logit.size())
 
-        pooled_features = self.pooling(x4).view(bs, -1)
-        cls_logit = self.fc(self.dropout(pooled_features))
+        pooled_features = self.model.pooling(x4).view(bs, -1)
+        cls_logit = self.model.fc(self.model.dropout(pooled_features))
 
         return cls_logit, seg_logit
+
+    def loadWeight(self, weight_path):
+        checkpoint = torch.load(chpt_path, map_location="cpu")
+        self.model.load_state_dict(checkpoint)
+        del checkpoint
+        gc.collect()
 
     @property
     def net(self):

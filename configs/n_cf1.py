@@ -28,9 +28,9 @@ cfg = {
     "dp":0,
     "accumulation_steps": 1,
     "seed": 42,
-    # "neptune_project": None,  
-    "neptune_project": "nvnn/siim2021",
-    "scheduler": "linear", #linear  cosine
+    "neptune_project": None,  
+    # "neptune_project": "nvnn/siim2021",
+    "scheduler": "cosine", #linear  cosine
     "model": "model_4",
     "epochs": 15,
     "mode": "train",

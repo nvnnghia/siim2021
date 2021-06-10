@@ -28,6 +28,10 @@ save_yaml(out_dir / "cfg.yaml", cfg)
 cfg = DotDict(cfg)
 mixed_precision = cfg["mixed_precision"]
 
+if "ema" not in cfg.keys():
+    cfg["ema"] = 0
+
+
 cfg["mode"] = parser_args.mode
 cfg["seed"] += int(parser_args.stage)
 cfg["stage"] = int(parser_args.stage)
