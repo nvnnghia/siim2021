@@ -5,7 +5,7 @@ outputdir = "outputs/" + os.path.basename(__file__).split(".")[0]
 cfg = {
     "debug": 0,
     "name": os.path.basename(__file__).split(".")[0],
-    "model_architecture": "eca_nfnet_l3",  # resnet200d, tf_efficientnetv2_m, eca_nfnet_l1, seresnext26tn_32x4d tf_efficientnet_b3_ns nf_regnet_b1 dm_nfnet_f1 densenet121 dm_nfnet_f4
+    "model_architecture": "eca_nfnet_l0",  # resnet200d, tf_efficientnetv2_m, eca_nfnet_l1, seresnext26tn_32x4d tf_efficientnet_b3_ns nf_regnet_b1 dm_nfnet_f1 densenet121 dm_nfnet_f4
     "image_dir": "data/png512",
     "train_csv_path": "data/train_split_seed42.csv",
     "input_size": 384,
@@ -14,7 +14,8 @@ cfg = {
     "out_dir": f"{outputdir}/a",
     "folds": [0, 1, 2, 3, 4],
     "augmentation": "s_0220/0220_hf_cut_sm2_0.75_384_v1.yaml",
-    "weight_file": 'outputs/n_cf2_pretraining/eca_nfnet_l3/best_map_fold0_st0.pth',  # "/model_state_45000.pth",
+    # "weight_file": None,  # "/model_state_45000.pth",
+    "weight_file": "outputs/n_cf2_pretraining/eca_nfnet_l0/best_map_fold0_st0.pth",
     "resume_training": False,
     "dropout": 0.5,
     "pool": "gem",
@@ -32,7 +33,7 @@ cfg = {
     # "neptune_project": "nvnn/siim2021",
     "scheduler": "cosine", #linear  cosine
     "model": "model_2_1",
-    "epochs": 15,
+    "epochs": 10,
     "mode": "train",
     "loss": 'bce',
     "muliscale": 0,

@@ -9,7 +9,8 @@
 * Train: `python main.py -C n_cf1`
 * Val: `python main.py -C n_cf1 -M val`
 * Create pseudo label: `python main.py -C n_cf1 -M pseudo`
-* search: `autoalbument-create --config-dir search --task classification --num-classes 4 & autoalbument-search --config-dir search`
+* Autoalbument search: `autoalbument-create --config-dir search --task classification --num-classes 4 & autoalbument-search --config-dir search`
+* C14 Pretraining: `CUDA_VISIBLE_DEVICES=1 python pretraining.py -C n_cf2_pretraining`
 
 ## TODO
 - [x] Minimal baseline
@@ -17,16 +18,18 @@
 - [x] Resume training
 - [x] Neptune
 - [x] Gradient accumulation
-- [ ] Use NIH pretrained weights
+- [x] NIH pretraining
 - [x] Mixed_precision
 - [ ] Multi-gpu
 - [x] Auxilliary segmentation head
-- [ ] Multiple head
-- [ ] Traing and Test model
+- [x] Multiple head
+- [ ] Training and Test model
 - [x] Progressive training
 
 
 ## Results
+* multiple stage training
+
 Model | FOLD | stage | mAP | AUC | model type | input size | cls1 | cls2 | cls3 | cls4 | config
 --- | --- | --- | --- |--- |--- |--- |--- |--- |--- |--- |---
 eca_nfnet_l0 | oof | 0 | 0.541 | 0.800 | 1 | 384 | 0.788 | 0.841 | 0.264 | 0.269 | n_cf2
@@ -42,3 +45,19 @@ eca_nfnet_l1 | oof | 1 | 0.572 | 0.821 | 1 | 512 | 0.809 | 0.856 | 0.288 | 0.334
 eca_nfnet_l1 | oof | 2 | 0.588 | 0.830 | 1 | 512 | 0.821 | 0.862 | 0.322 | 0.368 | n_cf4
 eca_nfnet_l1 | oof | 3 | 0.594 | 0.833 | 1 | 512 | 0.817 | 0.864 | 0.329 | 0.363 | n_cf4
 eca_nfnet_l1 | oof | 4 | 0.595 | 0.833 | 1 | 512 | 0.820 | 0.865 | 0.326 | 0.367 | n_cf4
+eca_nfnet_l0 | oof | 0 | 0.554 | 0.804 | 4 | 384 | 0.787 | 0.843 | 0.282 | 0.304 | n_cf5
+eca_nfnet_l0 | oof | 1 | 0.584 | 0.824 | 4 | 384 | 0.815 | 0.853 | 0.316 | 0.353 | n_cf5
+eca_nfnet_l0 | oof | 2 | 0.592 | 0.826 | 4 | 384 | 0.817 | 0.857 | 0.328 | 0.364 | n_cf5
+eca_nfnet_l0 | oof | 3 | 0.589 | 0.826 | 4 | 384 | 0.814 | 0.858 | 0.325 | 0.359 | n_cf5
+eca_nfnet_l0 | oof | 4 | 0.587 | 0.823 | 4 | 384 | 0.812 | 0.857 | 0.315 | 0.361 | n_cf5
+
+* Multiple stage training with NIH pretraining
+
+Model | FOLD | stage | mAP | AUC | model type | input size | cls1 | cls2 | cls3 | cls4 | config
+--- | --- | --- | --- |--- |--- |--- |--- |--- |--- |--- |---
+eca_nfnet_l0 | oof | 0 | 0.561 | 0.804 | 1 | 384 | 0.792 | 0.846 | 0.276 | 0.331 | n_cf7
+eca_nfnet_l0 | oof | 1 | 0.587 | 0.825 | 1 | 384 | 0.814 | 0.857 | 0.298 | 0.381 | n_cf7
+eca_nfnet_l0 | oof | 2 | 0.592 | 0.828 | 1 | 384 | 0.812 | 0.858 | 0.303 | 0.394 | n_cf7
+eca_nfnet_l0 | oof | 3 | 0.593 | 0.830 | 1 | 384 | 0.816 | 0.860 | 0.306 | 0.390 | n_cf7
+eca_nfnet_l0 | oof | 4 | 0.595 | 0.831 | 1 | 384 | 0.817 | 0.860 | 0.306 | 0.395 | n_cf7
+eca_nfnet_l0 | oof | 5 | 0.592 | 0.829 | 1 | 384 | 0.813 | 0.859 | 0.306 | 0.391 | n_cf7

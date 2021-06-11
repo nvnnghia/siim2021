@@ -3,10 +3,15 @@ from utils.evaluate import val
 
 oof_list = [
 	'outputs/n_cf3/oofs4.csv',
+	'outputs/n_cf4/oofs3.csv',
 	'outputs/n_cf4/oofs4.csv',
+	# 'outputs/n_cf4/oofs5.csv',
+	'outputs/n_cf5/oofs3.csv',
 	'outputs/n_cf5/oofs2.csv',
 	'outputs/n_cf2/oofs4.csv',
+	'outputs/n_cf2/oofs3.csv',
 	'outputs/n_cf1/oofs4.csv',
+	'outputs/n_cf1/oofs3.csv',
 ]
 
 df = pd.read_csv(oof_list[0])
