@@ -30,7 +30,12 @@ mixed_precision = cfg["mixed_precision"]
 
 if "ema" not in cfg.keys():
     cfg["ema"] = 0
-
+if "muliscale" not in cfg.keys():
+    cfg["muliscale"] = 0
+if "loss" not in cfg.keys():
+    cfg["loss"] = "bce"
+if "tta" not in cfg.keys():
+    cfg["tta"] = 1
 
 cfg["mode"] = parser_args.mode
 cfg["seed"] += int(parser_args.stage)

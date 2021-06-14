@@ -196,30 +196,35 @@ def train_func(model, train_loader, scheduler, device, epoch):
         # print(images.shape, targets.shape)
         if cfg["mixed_precision"]:
             with autocast():
-                if cfg.use_seg:
-                    prediction, seg_out = model(images.to(device))
-                else:
-                    prediction = model(images.to(device))
+                predictions = model(images.to(device))
         else:
-            if cfg.use_seg or cfg.model in ['model_2_1']:
-                prediction, seg_out = model(images.to(device))
-            else:
-                prediction = model(images.to(device))
+            predictions = model(images.to(device))
+
+
+        if cfg.model in ['model_2_1']:
+            prediction, prediction1 = predictions
+        elif cfg.model in ['model_4_1']:
+            prediction, prediction1, seg_out = predictions
+        elif cfg.model in ['model_4']:
+            prediction, seg_out = predictions
+        else:
+            prediction = predictions
+
 
         if cfg.loss == 'ce':
             loss = ce_criterion(prediction, targets1.to(device))
         elif cfg.loss in ['bce', 'focal']:
-            if cfg.model in ['model_2_1']:
-                loss = criterion(prediction, targets.to(device)) + criterion(seg_out, targets.to(device))
+            if cfg.model in ['model_2_1', 'model_4_1']:
+                loss = 0.5*criterion(prediction, targets.to(device)) + 0.5*criterion(prediction1, targets.to(device))
             else:
                 loss = criterion(prediction, targets.to(device))
         else:
-            loss = 0.2*ce_criterion(seg_out, targets1.to(device)) + 0.5*criterion(prediction, targets.to(device))
+            loss = 0.2*ce_criterion(prediction1, targets1.to(device)) + 0.5*criterion(prediction, targets.to(device))
 
         if cfg.stage>0:
             # loss += 0.5*criterion(prediction, oof_targets.to(device))
-            if cfg.model in ['model_2_1']:
-                stage_loss = criterion(prediction, oof_targets.float().to(device)) + criterion(seg_out, oof_targets.float().to(device))
+            if cfg.model in ['model_2_1', 'model_4_1']:
+                stage_loss = 0.5*criterion(prediction, oof_targets.float().to(device)) + 0.5*criterion(prediction1, oof_targets.float().to(device))
             else:
                 stage_loss = criterion(prediction, oof_targets.float().to(device))
 
@@ -287,27 +292,34 @@ def valid_func(model, valid_loader):
             origin_labels.append(targets.detach().cpu().numpy())
 
 
-            if cfg.use_seg or cfg.model in ['model_2_1']:
-                logits, seg_out = model(images)
+            predictions = model(images)
+
+            if cfg.model in ['model_2_1']:
+                logits, prediction1 = predictions
+            elif cfg.model in ['model_4_1']:
+                logits, prediction1, seg_out = predictions
+            elif cfg.model in ['model_4']:
+                logits, seg_out = predictions
             else:
-                logits = model(images)
+                logits = predictions
+
 
             if cfg.loss == 'ce':
                 loss = ce_criterion(logits, targets1.to(device))
             elif cfg.loss in ['bce', 'focal']:
-                if cfg.model in ['model_2_1']:
-                    loss = criterion(logits, targets) + criterion(seg_out, targets)
+                if cfg.model in ['model_2_1', 'model_4_1']:
+                    loss = criterion(logits, targets) + criterion(prediction1, targets)
                 else:
                     loss = criterion(logits, targets)
             else:
-                loss = 0.2*ce_criterion(logits1, targets1.to(device)) + 0.5*criterion(logits, targets)
+                loss = 0.2*ce_criterion(prediction1, targets1.to(device)) + 0.5*criterion(logits, targets)
 
             if cfg.model in ['model_2']: #use bceloss
                 prediction = logits
             else:
                 if cfg.loss in ['bce', 'focal']:
-                    if cfg.model in ['model_2_1']:
-                        prediction = F.sigmoid(logits)/2 + F.sigmoid(seg_out)/2
+                    if cfg.model in ['model_2_1', 'model_4_1']:
+                        prediction = F.sigmoid(logits)/2 + F.sigmoid(prediction1)/2
                     else:
                         prediction = F.sigmoid(logits)
                 elif cfg.loss == 'ce':
@@ -354,6 +366,8 @@ def valid_func(model, valid_loader):
 
     auc = np.mean(aucs)
 
+    acc = np.mean(acc)
+
     map, ap_list = val_map(origin_labels, pred_probs)
 
     if cfg.neptune_project and cfg.mode == 'train':
@@ -365,7 +379,7 @@ def valid_func(model, valid_loader):
         for cc, ap in enumerate(ap_list):
             neptune.log_metric(f'VAL map cls {cc}', ap)
 
-    return loss_valid, micro_score, macro_score, auc, map, pred_probs
+    return loss_valid, micro_score, acc, auc, map, pred_probs
 
 def intersect_dicts(da, db, exclude=()):
     # Dictionary intersection of matching keys and shapes, omitting 'exclude' keys, using da values
@@ -374,7 +388,7 @@ def intersect_dicts(da, db, exclude=()):
 if __name__ == "__main__":
     set_seed(cfg["seed"])
 
-    if cfg.model in ['model_4']:
+    if cfg.model in ['model_4', 'model_4_1']:
         print("[ √ ] Using segmentation")
         cfg.use_seg = True
 
@@ -418,10 +432,14 @@ if __name__ == "__main__":
             if cfg.weight_file:
                 exclude = []  # exclude keys
                 state_dict = torch.load(cfg.weight_file, map_location=device)  # load checkpoint
-                # state_dict = ckpt['model'].float().state_dict()  # to FP32
-                state_dict = intersect_dicts(state_dict, model.state_dict(), exclude=exclude)  # intersect
-                model.load_state_dict(state_dict, strict=False)  # load
-                print('Transferred %g/%g items from %s' % (len(state_dict), len(model.state_dict()), cfg.weight_file))  # report
+                if cfg.use_seg:
+                    state_dict = intersect_dicts(state_dict, model.model.state_dict(), exclude=exclude)  # intersect
+                    model.model.load_state_dict(state_dict, strict=False)  # load
+                    print('Transferred %g/%g items from %s' % (len(state_dict), len(model.model.state_dict()), cfg.weight_file))  # report
+                else:
+                    state_dict = intersect_dicts(state_dict, model.state_dict(), exclude=exclude)  # intersect
+                    model.load_state_dict(state_dict, strict=False)  # load
+                    print('Transferred %g/%g items from %s' % (len(state_dict), len(model.state_dict()), cfg.weight_file))  # report
                 del state_dict
 
             if cfg.resume_training:
@@ -450,28 +468,30 @@ if __name__ == "__main__":
         
             loss_min = 1e6
             map_score_max = 0
+            best_score = 0
             for epoch in range(1, cfg.epochs+1):
                 logfile(f'====epoch {epoch} ====')
                 loss_train = train_func(model, train_loader, scheduler, device, epoch)
-                loss_valid, micro_score, macro_score, auc, map, pred_probs = valid_func(model, valid_loader)
+                loss_valid, micro_score, acc, auc, map, pred_probs = valid_func(model, valid_loader)
                 if cfg.loss in ['ce', 'all']:
                     ce_criterion.next_epoch()
 
-                if map > map_score_max:
-                    logfile(f'map_score_max ({map_score_max:.6f} --> {map:.6f}). Saving model ...')
+                score = 0.4*acc + 0.4*map + 0.2*auc
+                if score > best_score:
+                    logfile(f'best_score ({best_score:.6f} --> {score:.6f}). Saving model ...')
                     if cfg.use_seg:
                         torch.save(model.model.state_dict(), f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth')
                     else:
                         torch.save(model.state_dict(), f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth')
-                    map_score_max = map
+                    best_score = score
 
-                if loss_valid < loss_min:
-                    logfile(f'loss_min ({loss_min:.6f} --> {loss_valid:.6f}). Saving model ...')
-                    loss_min = loss_valid
-                    if cfg.use_seg:
-                        torch.save(model.model.state_dict(), f'{cfg.out_dir}/best_loss_fold{fold_id}_st{cfg.stage}.pth')
-                    else:
-                        torch.save(model.state_dict(), f'{cfg.out_dir}/best_loss_fold{fold_id}_st{cfg.stage}.pth')
+                # if loss_valid < loss_min:
+                #     logfile(f'loss_min ({loss_min:.6f} --> {loss_valid:.6f}). Saving model ...')
+                #     loss_min = loss_valid
+                #     if cfg.use_seg:
+                #         torch.save(model.model.state_dict(), f'{cfg.out_dir}/best_loss_fold{fold_id}_st{cfg.stage}.pth')
+                #     else:
+                #         torch.save(model.state_dict(), f'{cfg.out_dir}/best_loss_fold{fold_id}_st{cfg.stage}.pth')
 
                 if epoch == cfg.epochs:
                     if cfg.use_seg:
@@ -491,7 +511,7 @@ if __name__ == "__main__":
 
                     torch.save(checkpoint, f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth')
 
-                logfile(f'[EPOCH {epoch}] micro f1 score: {micro_score}, macro_score f1 score: {macro_score}, val loss: {loss_valid}, AUC: {auc}, MAP: {map}')
+                logfile(f'[EPOCH {epoch}] micro f1 score: {micro_score}, acc score: {acc}, val loss: {loss_valid}, AUC: {auc}, MAP: {map}')
 
             if cfg.neptune_project and cfg.mode == 'train':
                 neptune.stop()

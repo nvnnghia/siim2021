@@ -42,6 +42,7 @@ class SIIMModel(nn.Module):
         # if pretrained:
         #     pretrained_path = '../input/resnet200d-pretrained-weight/resnet200d_ra2-bdba9bf9.pth'
         #     self.model.load_state_dict(torch.load(pretrained_path))
+        self.model_name = model_name
 
         if pool == 'AdaptiveAvgPool2d':
             self.pooling = nn.AdaptiveAvgPool2d(1)
@@ -66,6 +67,9 @@ class SIIMModel(nn.Module):
             self.model.global_pool = nn.Identity()
             self.model.classifier = nn.Identity()
             n_features = self.model.num_features
+        elif 'coat_' in model_name or 'cait_' in model_name or 'swin_' in model_name:
+            n_features = self.model.head.in_features
+            self.model.head = nn.Identity()
         else:
             raise NotImplementedError(f"model type {model_name} has not implemented!")
         
@@ -77,8 +81,9 @@ class SIIMModel(nn.Module):
     def forward(self, x):
         bs = x.size(0)
         features = self.model(x)
-        pooled_features = self.pooling(features).view(bs, -1)
-        output = self.fc(self.dropout(pooled_features))
+        if not 'coat_' in self.model_name and not 'cait_' in self.model_name and not 'swin_' in self.model_name:
+            features = self.pooling(features).view(bs, -1)
+        output = self.fc(self.dropout(features))
         return output
 
     @property

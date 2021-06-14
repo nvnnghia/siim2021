@@ -95,7 +95,7 @@ class SIIMDataset(Dataset):
         row = self.df.loc[index]
         path = f'{self.cfg.image_dir}/train/{row.id[:-6]}.png'
         img = cv2.imread(path)  
-        img = cv2.resize(img, (input_size, input_size))
+        # img = cv2.resize(img, (input_size, input_size))
 
         if self.cfg.use_seg:
             a = row.label 

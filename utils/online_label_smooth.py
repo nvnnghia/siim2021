@@ -68,6 +68,8 @@ class OnlineLabelSmoothing(nn.Module):
             5. Average memory by dividing column-wise by result of step (4).
         Note on (5): This is done outside this function since we only need to
                      normalize at the end of the epoch.
+         
+
         """
         # 1. Calculate predicted classes
         y_h_idx = y_h.argmax(dim=-1)
