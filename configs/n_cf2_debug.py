@@ -12,10 +12,10 @@ cfg = {
     "output_size": 4,
     "use_seg":False,
     "out_dir": f"{outputdir}",
-    "folds": [0, 1, 2, 3, 4],
+    "folds": [2, 3, 4],
     "augmentation": "s_0220/0220_hf_cut_sm2_0.75_384_v1.yaml",
-    # "weight_file": 'outputs/n_cf2_pretraining/eca_nfnet_l0/best_map_fold0_st0.pth',  # "/model_state_45000.pth",
-    "weight_file":None,
+    "weight_file": 'outputs/n_cf2_pretraining/swin_large_patch4_window12_384/best_map_fold0_st0.pth',  # "/model_state_45000.pth",
+    # "weight_file":None,
     "resume_training": False,
     "dropout": 0.5,
     "pool": "gem",
@@ -39,4 +39,4 @@ cfg = {
     "muliscale": 0,
 }
 
-# swin_large_patch4_window12_384
+# swin_large_patch4_window12_384 vit_large_patch16_384

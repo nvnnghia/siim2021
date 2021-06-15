@@ -6,47 +6,32 @@ from pathlib import Path
 
 import cv2
 import torch
+import torch.backends.cudnn as cudnn
 import numpy as np 
 
 from models.experimental import attempt_load
 from utils.datasets import LoadStreams, LoadImages, letterbox
-from utils.general import (non_max_suppression, scale_coords, strip_optimizer)
+from utils.general import (non_max_suppression, scale_coords)
 from utils.torch_utils import select_device
 from utils.map import calculate_image_precision, calculate_image_precision_f1
 from tqdm import tqdm 
 from ensemble_boxes import weighted_boxes_fusion
 from glob import glob
-import warnings
 import shutil 
 
-# parser = argparse.ArgumentParser()
-# parser.add_argument('--is_val', default=0, help='is_eval')
-# parser.add_argument('--is_wbf2', default=0, help='is_wbf2')
-# args = parser.parse_args()
+parser = argparse.ArgumentParser()
+parser.add_argument('--is_val', default=1, help='is_eval')
+parser.add_argument('--is_wbf2', default=0, help='is_wbf2')
+args = parser.parse_args()
 
 
-def get_data(datatxt, key=None):
+def get_data(datatxt):
     file = open(datatxt)
     lines = file.readlines()
     file.close()
-
-    if key:
-        lines = [x for x in lines if key in x]
-
     list_image_path = [x.strip().split(' ')[0] for x in lines]
     list_label_path = [x.strip().split(' ')[1] for x in lines]
     return list_image_path, list_label_path
-
-def getBoxes(label_path):
-    with open(label_path) as f:
-        lines = f.readlines()
-    boxes = []
-    for line in lines:
-        xmin, ymin, xmax, ymax = list(map(int, line.strip().split(' ')))
-        xmin = max(0, xmin)
-        ymin = max(0, ymin)
-        boxes.append([xmin, ymin, xmax, ymax])
-    return np.array(boxes)
 
 def getBoxes_yolo(label_path, im_w, im_h):
     with open(label_path) as f:
@@ -56,11 +41,7 @@ def getBoxes_yolo(label_path, im_w, im_h):
     for i in range(num_classes):
         gt_boxes[i] = []
     for line in lines:
-        # cls, xc, yc, w, h = list(map(float, line.strip().split(' ')))
-        try:
-            cls, xc, yc, w, h = list(map(float, line.strip().split(' ')))
-        except:
-            print(label_path)
+        cls, xc, yc, w, h = list(map(float, line.strip().split(' ')))
         xmin, ymin, xmax, ymax = xc - w/2, yc-h/2, xc + w/2, yc+h/2
         xmin, ymin, xmax, ymax = list(map(int, [xmin*im_w, ymin*im_h, xmax*im_w, ymax*im_h]))
         xmin = max(0, xmin)
@@ -271,12 +252,12 @@ def weighted_boxes_fusion_customized(boxes_list, scores_list, labels_list, weigh
             boxes1=boxes[1:]
             boxes.remove(boxPrim)
             for box in boxes1:
-                if box[0] in [5,12]:
-                    iou_thr = 0.4
-                elif box[0] in [0]:
-                    iou_thr=0.55
-                else:
-                    iou_thr=0.5
+                # if box[0] in [5,12]:
+                #     iou_thr = 0.4
+                # elif box[0] in [0]:
+                #     iou_thr=0.55
+                # else:
+                #     iou_thr=0.5
 
                 if boxPrim[0]==box[0] and bb_intersection_over_union(boxPrim[2:6], box[2:6]) > iou_thr:
 
@@ -361,10 +342,10 @@ def detect1Image(im0, imgsz, model, device, conf_thres, iou_thres):
 
             # Write results
             for *xyxy, conf, cls in det:
-                boxes.append([float(xyxy[0].cpu()), float(xyxy[1].cpu()), float(xyxy[2].cpu()), float(xyxy[3].cpu())])
+                boxes.append([float(xyxy[0]), float(xyxy[1]), float(xyxy[2]), float(xyxy[3])])
                 # boxes.append([int(xyxy[0]), int(xyxy[1]), int(xyxy[2]), int(xyxy[3])])
-                scores.append(conf.cpu())
-                classes.append(cls.cpu())
+                scores.append(conf)
+                classes.append(cls)
 
     return np.array(boxes), np.array(scores), np.array(classes) 
 
@@ -383,6 +364,7 @@ def detectTTA(im01, imgsz, model, device, conf_thres, iou_thres,im_h, im_w):
             list_classes.append(classes) 
     boxes, scores, classes = run_wbf(list_boxes, list_scores, list_classes, im_w, im_h, weights=None, iou_thr=iou_thres, skip_box_thr=conf_thres)
     return boxes, scores, classes
+
 
 def rotBoxes90(boxes, im_w, im_h):
     ret_boxes =[]
@@ -404,12 +386,11 @@ def evaluation(image_list, label_list = None, weights = None, imgsz=None, rots=N
         is_eval = False
 
     conf_thres = 0.001
-    f_thres = 0.4
-    iou_thres = 0.6
-    num_draw = 1000
+    f_thres = 0.1
+    iou_thres = 0.5
     
-    if is_eval:
-        iou_thresholds_05 = [0.5]
+    if is_val:
+        iou_thresholds_05 = [0.4]
         area_list = [(0,800),(800,1500),(1500,3000),(3000,8000),(8000,1e16)]
         results = {}
         for i in range(num_classes):
@@ -463,11 +444,14 @@ def evaluation(image_list, label_list = None, weights = None, imgsz=None, rots=N
                         list_scores.append(scores)
                         list_classes.append(classes)
 
-            # boxes, scores = run_wbf(list_boxes, list_scores, im_w, im_h, weights=None, iou_thr=0.5, skip_box_thr=0.55)   
-            # boxes, scores, classes = run_wbf(list_boxes, list_scores, list_classes, im_w, im_h, weights=None, iou_thr=0.6, skip_box_thr=conf_thres)
+            # boxes, scores = run_wbf(list_boxes, list_scores, im_w, im_h, weights=None, iou_thr=0.5, skip_box_thr=0.55)
+            boxes, scores, classes = run_wbf(list_boxes, list_scores, list_classes, im_w, im_h, weights=None, iou_thr=0.6, skip_box_thr=conf_thres)
+            max_score = 0
             for box, score, cls in zip(boxes, scores, classes):
                 ofile.write(f'{name} {cls} {box[0]} {box[1]} {box[2]} {box[3]} {score}\n')
-
+                if score>max_score:
+                    max_score = score
+            ofile.write(f'{name} 1.0 0 0 1 1 {1-max_score}\n')
 
             if is_eval:
                 boxes = boxes[scores >= f_thres].astype(np.int32)
@@ -495,21 +479,6 @@ def evaluation(image_list, label_list = None, weights = None, imgsz=None, rots=N
                     preds_sorted = boxes[preds_sorted_idx]
 
                     gt_boxes = np.array(gt_boxes_all[i])
-
-                    #Visualize
-                    if count < num_draw:
-                        for box, score in zip(boxes,scores):
-                            x1, y1, x2, y2 = box
-                            cv2.rectangle(im01, (x1, y1), (x2, y2), (0,0,255), 4)
-                            cv2.putText(im01, f"{i}_{score:.2f}", (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 0.6,(0,0,255),2,cv2.LINE_AA)
-
-                        for box in gt_boxes:
-                            x1, y1, x2, y2 = box
-                            cv2.rectangle(im01, (x1, y1), (x2, y2), (0,255,0), 2)
-                            cv2.putText(im01, f"{i}", (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 0.6,(0,255,0),1,cv2.LINE_AA)
-
-                        # cv2.imwrite('draw/%s'%(name), im01)
-
 
                     tp, fp, fn, size_results = calculate_image_precision_f1(preds_sorted,
                                                             gt_boxes,
@@ -547,16 +516,9 @@ def evaluation(image_list, label_list = None, weights = None, imgsz=None, rots=N
                     res[i]['fn'] += total_fn
 
                 print(count, f"F1 score: {f1_score:.4f}   precision: {precision:.4f}  recall: {recall:.4f}", end='\r')
-                if count<num_draw:
-                    cv2.imwrite('draw/%s'%(name), im01)
+
             else:
                 print(count, end='\r')
-            #     for box, score in zip(boxes,scores):
-            #         x1, y1, x2, y2 = box
-            #         cv2.rectangle(im01, (x1, y1), (x2, y2), (0,0,255), 2)
-            #         cv2.putText(im01, f"{score:.2f}", (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 0.4,(0,255,0),1,cv2.LINE_AA)
-            #     cv2.imwrite('draw/%s'%(name), im01)
-            #     print(count, ' image saved to draw/%s'%(name))
 
             count+=1
             # if count>20:
@@ -568,25 +530,51 @@ def evaluation(image_list, label_list = None, weights = None, imgsz=None, rots=N
                 TP: {res[i]['tp']:.4f}   FP: {res[i]['fp']:.4f}  FN: {res[i]['fn']:.4f}")
 
 if __name__ =="__main__":
-    # is_val = int(args.is_val)
-    is_wbf2 = False
-    # is_wbf2 = True
+    is_val = int(args.is_val)
+    is_wbf2 = int(args.is_wbf2)
 
-    weights = ['runs/vds_cf5_m_640_aug/exp/weights/last.pt'] 
-    outname = 'outputs/x_exp_last.txt'
-    sizes = [640]
-    rots = [0]
-    num_classes = 4
+    weights = [
+            # # best
+            # #s
+            # 'runs/cf1_cls1_f0/exp/weights/best.pt',
+            '../yolov5_heatmap/runs/cf1_cls1_f0/exp/weights/best.pt',
+            ]
 
-    label_list=None
+    # weights = [x for x in weights if 'mean' in x]
+    print(len(weights))
 
-    # image_list, label_list = get_data('test_vds.txt', key=None)
-    image_list, label_list = get_data('../../dataset/coco/val_4cls.txt', key=None)
-    # label_list = [x.replace('yolov5/data/data/labels', 'darknet/data/data/0') for x in label_list]
+    sizes = [640]*len(weights)
+    rots = [0]*len(weights)
 
-    # strip_optimizer(weights[0])
+    for w in tqdm(weights):
+        if os.path.isfile(w):
+            pass
+        else:
+            print(w)
+    if is_val:
+        num_classes = 1
+        if is_wbf2:
+            outdir = 'outputs/val_txt_wbf2/'
+        else:
+            outdir = 'outputs/val_txt/'
+    else:
+        image_list, label_list = get_data('../data/test_pos_005.txt')
+        # image_list, label_list = get_data('../final/data/alltest.txt')
+        # label_list = [x]
+        label_list=None
+        if is_wbf2:
+            outdir = 'outputs/test_txt_005_wbf2/'
+        else:
+            outdir = 'outputs/test_txt_005/'
 
-    print(len(image_list), len(label_list))
+    for cc, (weight, size, rot) in enumerate(zip(weights, sizes, rots)):
+        if cc>=0:
+            if is_val:
+                fold = int(weight.split('/')[-4][-1])
+                image_list, label_list = get_data(f'../data/val_f{fold}_s42_cls1.txt')
 
-    evaluation(image_list, label_list=label_list, weights=weights, imgsz=sizes, rots=rots, is_TTA = False, outname=outname)
+            outname = outdir +  weight.replace('/', '_').replace('.pt', '.txt') 
+            print(f"'{outname}',")
+
+            evaluation(image_list, label_list=label_list, weights=[weight], imgsz=[size], rots=[rot], is_TTA = True, outname=outname)
 

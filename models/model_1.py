@@ -67,7 +67,7 @@ class SIIMModel(nn.Module):
             self.model.global_pool = nn.Identity()
             self.model.classifier = nn.Identity()
             n_features = self.model.num_features
-        elif 'coat_' in model_name or 'cait_' in model_name or 'swin_' in model_name:
+        elif 'coat_' in model_name or 'cait_' in model_name or 'swin_' in model_name or 'vit_' in model_name:
             n_features = self.model.head.in_features
             self.model.head = nn.Identity()
         else:
@@ -81,7 +81,7 @@ class SIIMModel(nn.Module):
     def forward(self, x):
         bs = x.size(0)
         features = self.model(x)
-        if not 'coat_' in self.model_name and not 'cait_' in self.model_name and not 'swin_' in self.model_name:
+        if not 'coat_' in self.model_name and not 'cait_' in self.model_name and not 'swin_' in self.model_name and not 'vit_' in self.model_name:
             features = self.pooling(features).view(bs, -1)
         output = self.fc(self.dropout(features))
         return output

@@ -323,36 +323,9 @@ def map_calc(det_path, gt_path, output_filename):
 
 if __name__ == '__main__':
     MINOVERLAP = 0.5 # default IOU value 
-    gt_path = 'gt.txt'
-    det_path = 'outputs/x_exp_last.txt'
+    gt_path = '../data/val_gt_s42_f0.txt'
+    det_path = 'outputs/val_txt/.._yolov5_heatmap_runs_cf1_cls1_f0_exp_weights_best.txt'
     # det_path = '../yolov4_opencv/v4.txt'
     output_filename = 'map.txt'
     map_calc(det_path=det_path, gt_path=gt_path, output_filename=output_filename)
 
-
- # secondary label
- # mixup
- # augmentation
- # architecture
- # metadata
- # swa
- # stage2: soundscrapes 
- # threshold cho moi cls
- # optimizer?
-
- #done
- # 397 + nocall cls
- # filter nocall crop
- # 5s + secondary label
- # b3 b7 
- # augmentation (time_shift_spectrogram, pitch_shift_spectrogram, freq_mask, time_mask)
- # class balance sampling 
- # post processing: tiny improvement
-
-                # o = o.detach().cpu().numpy()
-
-                # suma = np.sum(o,0)
-                # suma /= np.max(suma)
-                # o = (1+ 0.5*suma)*o
-
-                # pred += o

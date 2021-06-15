@@ -15,7 +15,7 @@ class ECANFNET(nn.Module):
         else:
             raise NotImplementedError(f"pooling type {pool} has not implemented!")
 
-        self.model = timm.create_model('swin_base_patch4_window12_384', pretrained=False) #cait_xs24_384 coat_lite_small swin_base_patch4_window12_384
+        self.model = timm.create_model('vit_large_patch16_384', pretrained=False) #cait_xs24_384 coat_lite_small swin_base_patch4_window12_384 vit_deit_base_distilled_patch16_384
         # self.model.stem.conv1 = ScaledStdConv2d(in_channels = 6, out_channels=self.model.stem.conv1.out_channels, 
         #     kernel_size=self.model.stem.conv1.kernel_size[0], stride=self.model.stem.conv1.stride[0])
 
@@ -51,11 +51,12 @@ class ECANFNET(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
         self.model.head = nn.Identity()
+        self.model.head_dist = None
 
     def forward(self, x):
         bs = x.size(0)
         features = self.model(x)
-        print(features.shape)
+        print(features[0].shape, features[1].shape)
         # x = self.model.stem(x)
         # print(x.shape)
         # # x = self.model.stages(x)
