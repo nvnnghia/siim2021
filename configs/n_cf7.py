@@ -11,11 +11,11 @@ cfg = {
     "input_size": 384,
     "output_size": 4,
     "use_seg":False,
-    "out_dir": f"{outputdir}/a",
+    "out_dir": f"{outputdir}/histogram_norm",
     "folds": [0, 1, 2, 3, 4],
     "augmentation": "s_0220/0220_hf_cut_sm2_0.75_384_v1.yaml",
     # "weight_file": None,  # "/model_state_45000.pth",
-    "weight_file": "outputs/n_cf2_pretraining/eca_nfnet_l0/best_map_fold0_st0.pth",
+    "weight_file": "outputs/n_cf2_pretraining/eca_nfnet_l0/", #best_map_fold0_st0.pth",
     "resume_training": False,
     "dropout": 0.5,
     "pool": "gem",
@@ -37,5 +37,6 @@ cfg = {
     "mode": "train",
     "loss": 'bce',
     "muliscale": 0,
+    "histogram_norm": 1,
 }
 

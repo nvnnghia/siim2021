@@ -10,7 +10,7 @@ def val(df):
 
     aucs = []
     acc = []
-    for i in range(4):
+    for i in range(origin_labels.shape[1]):
         aucs.append(roc_auc_score(origin_labels[:, i], pred_probs[:, i]))
         acc.append(average_precision_score(origin_labels[:, i], pred_probs[:, i]))
 

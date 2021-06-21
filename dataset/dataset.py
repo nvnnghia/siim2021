@@ -67,6 +67,18 @@ def create_heatmap(im_w, im_h, labels, type=1):
     else:
         return output_layer
 
+def do_histogram_norm(image, mag=[[2,4],[6,12]]):
+    num_bin = 255
+
+    histogram, bin = np.histogram( image.flatten(), num_bin, density=True)
+    cdf = histogram.cumsum()  # cumulative distribution function
+    cdf = 255 * cdf / cdf[-1]  # normalize
+
+    # use linear interpolation of cdf to find new pixel values
+    equalized = np.interp(image.flatten(), bin[:-1], cdf)
+    image = equalized.reshape(image.shape)
+    return image
+
 class SIIMDataset(Dataset):
     def __init__(self, df, tfms=None, cfg=None, mode='train'):
 
@@ -74,9 +86,11 @@ class SIIMDataset(Dataset):
         self.mode = mode
         self.transform = tfms
 
-        self.labels = self.df.targets.values
-        if cfg.stage > 0:
-            self.oof_labels = self.df[['pred_cls1', 'pred_cls2', 'pred_cls3' ,'pred_cls4']].values
+        if self.mode not in ['test']:
+            self.labels = self.df.targets.values
+            if cfg.stage > 0:
+                cols = [f'pred_cls{i+1}' for i in range(cfg.output_size)]
+                self.oof_labels = self.df[cols].values
         self.cfg = cfg
         self.tensor_tfms = Compose([
             ToTensor(),
@@ -93,29 +107,36 @@ class SIIMDataset(Dataset):
             index,input_size = item,self.cfg.input_size
 
         row = self.df.loc[index]
-        path = f'{self.cfg.image_dir}/train/{row.id[:-6]}.png'
+        if self.mode in 'test':
+            path = f'{self.cfg.image_dir}/test/{row.image_id}.png'
+        else:
+            path = f'{self.cfg.image_dir}/train/{row.id[:-6]}.png'
         img = cv2.imread(path)  
         # img = cv2.resize(img, (input_size, input_size))
+        if self.cfg.histogram_norm:
+            img = do_histogram_norm(img).astype(np.uint8)
 
-        if self.cfg.use_seg:
-            a = row.label 
-            a = np.array(a.split(' ')).reshape(-1,6)
-            dim_h = row.dim0 #heigh
-            dim_w = row.dim1 #width
-            im_h, im_w = img.shape[:2]
-            boxes = []
-            for b in a:
-                if b[0]=='opacity':
-                    conf, x1, y1, x2, y2 = list(map(float, b[1:]))
-                    # print(conf, x1, y1, x2, y2)
-                    x1 = x1*im_w/dim_w
-                    x2 = x2*im_w/dim_w
-                    y1 = y1*im_h/dim_h
-                    y2 = y2*im_h/dim_h
+        if self.mode not in ['test']:
+            if self.cfg.use_seg or self.cfg.output_size>4:
+                a = row.label 
+                a = np.array(a.split(' ')).reshape(-1,6)
+                dim_h = row.dim0 #heigh
+                dim_w = row.dim1 #width
+                im_h, im_w = img.shape[:2]
+                boxes = []
+                for b in a:
+                    if b[0]=='opacity':
+                        conf, x1, y1, x2, y2 = list(map(float, b[1:]))
+                        # print(conf, x1, y1, x2, y2)
+                        x1 = x1*im_w/dim_w
+                        x2 = x2*im_w/dim_w
+                        y1 = y1*im_h/dim_h
+                        y2 = y2*im_h/dim_h
 
-                    boxes.append([x1, y1, x2, y2, conf])
+                        boxes.append([x1, y1, x2, y2, conf])
 
-            hm = create_heatmap(im_w, im_h, boxes, type=2)
+                if self.cfg.use_seg:
+                    hm = create_heatmap(im_w, im_h, boxes, type=2)
 
         if self.transform is not None:
             if self.cfg.use_seg:
@@ -126,18 +147,21 @@ class SIIMDataset(Dataset):
             
             img = res['image']
 
-        label = torch.zeros(self.cfg.output_size)
-        label[self.labels[index]-1] = 1
-
-        oof_label = torch.zeros(self.cfg.output_size)
-        if self.cfg.stage>0:
-            oof_label = torch.tensor(self.oof_labels[index])
-
-
         img = self.tensor_tfms(img)
         if self.mode == 'test':
             return img
         else:
+
+            label = torch.zeros(self.cfg.output_size)
+            label[self.labels[index]-1] = 1
+
+            if self.cfg.output_size>4 and len(boxes)>0:
+                label[4] = 1
+
+            oof_label = torch.zeros(self.cfg.output_size)
+            if self.cfg.stage>0:
+                oof_label = torch.tensor(self.oof_labels[index])
+
             if self.cfg.use_seg:
                 return img, label, oof_label, torch.tensor(self.labels[index]-1), torch.from_numpy(hm)
             return img, label, oof_label, torch.tensor(self.labels[index]-1)

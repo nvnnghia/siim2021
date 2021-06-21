@@ -18,6 +18,6 @@ def strip_optimizer(f='best.pt', s=''):  # from utils.general import *; strip_op
     mb = os.path.getsize(s or f) / 1E6  # filesize
     print(f"Optimizer stripped from {f},{(' saved as %s,' % s) if s else ''} {mb:.1f}MB")
 
-for i in [0]:
-    strip_optimizer(f=f'runs/cf1_cls1_f{i}/exp/weights/best.pt')
+for i in [2,3,4]:
+    strip_optimizer(f=f'runs/cf1_cls1_m_f{i}/exp/weights/best.pt')
 

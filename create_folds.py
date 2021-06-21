@@ -39,6 +39,9 @@ df_meta = df_meta[df_meta.split=='train']
 df_image['image_id'] = df_image['id'].apply(lambda x: x.split('_')[0])
 df_image = pd.merge(df_image, df_meta, on="image_id")
 
+df_image['has_box'] = df_image['label'].apply(lambda x: 1*('none' in x))
+print(df_image['has_box'].value_counts())
+
 df_image.to_csv(f'{data_dir}/train_split_seed{seed}.csv', index=False)
 
 for fold_id in [0,1,2,3,4]:

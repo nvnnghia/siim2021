@@ -536,8 +536,25 @@ if __name__ =="__main__":
     weights = [
             # # best
             # #s
-            # 'runs/cf1_cls1_f0/exp/weights/best.pt',
-            '../yolov5_heatmap/runs/cf1_cls1_f0/exp/weights/best.pt',
+            'runs/cf1_cls1_f0/exp/weights/last.pt',
+            'runs/cf1_cls1_f1/exp/weights/last.pt',
+            'runs/cf1_cls1_f2/exp/weights/last.pt',
+            'runs/cf1_cls1_f3/exp/weights/last.pt',
+            'runs/cf1_cls1_f4/exp/weights/last.pt',
+
+
+            '../yolov5_heatmap/runs/cf1_cls1_f1/exp/weights/last.pt',
+            '../yolov5_heatmap/runs/cf1_cls1_f2/exp/weights/last.pt',
+            '../yolov5_heatmap/runs/cf1_cls1_f3/exp/weights/last.pt',
+            '../yolov5_heatmap/runs/cf1_cls1_f4/exp/weights/last.pt',
+            '../yolov5_heatmap/runs/cf1_cls1_f0/exp/weights/last.pt',
+
+            # '../yolov5_heatmap/runs/cf1_cls1_m_f0/exp2/weights/best.pt',
+            # '../yolov5_heatmap/runs/cf1_cls1_m_f1/exp2/weights/best.pt',
+            # '../yolov5_heatmap/runs/cf1_cls1_m_f2/exp/weights/best.pt',
+            # '../yolov5_heatmap/runs/cf1_cls1_m_f3/exp/weights/best.pt',
+            # '../yolov5_heatmap/runs/cf1_cls1_m_f4/exp/weights/best.pt',
+
             ]
 
     # weights = [x for x in weights if 'mean' in x]
@@ -558,8 +575,9 @@ if __name__ =="__main__":
         else:
             outdir = 'outputs/val_txt/'
     else:
-        image_list, label_list = get_data('../data/test_pos_005.txt')
+        # image_list, label_list = get_data('../data/test_pos_005.txt')
         # image_list, label_list = get_data('../final/data/alltest.txt')
+        image_list = glob('../../data/png512/test/*.png')
         # label_list = [x]
         label_list=None
         if is_wbf2:
@@ -573,7 +591,7 @@ if __name__ =="__main__":
                 fold = int(weight.split('/')[-4][-1])
                 image_list, label_list = get_data(f'../data/val_f{fold}_s42_cls1.txt')
 
-            outname = outdir +  weight.replace('/', '_').replace('.pt', '.txt') 
+            outname = outdir +  weight.replace('/', '_').replace('.pt', '.txt').replace('..', '')
             print(f"'{outname}',")
 
             evaluation(image_list, label_list=label_list, weights=[weight], imgsz=[size], rots=[rot], is_TTA = True, outname=outname)

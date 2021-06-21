@@ -36,6 +36,8 @@ if "loss" not in cfg.keys():
     cfg["loss"] = "bce"
 if "tta" not in cfg.keys():
     cfg["tta"] = 1
+if "histogram_norm" not in cfg.keys():
+    cfg["histogram_norm"] = 0
 
 cfg["mode"] = parser_args.mode
 cfg["seed"] += int(parser_args.stage)

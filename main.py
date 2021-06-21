@@ -55,7 +55,7 @@ def sigmoid_rampup(current, rampup_length=15):
         return 0.9*float(np.exp(-5.0 * phase * phase))
 
 def get_model(cfg):
-    model = SIIMModel(model_name=cfg.model_architecture, pretrained=True, pool=cfg.pool, dropout = cfg.dropout)
+    model = SIIMModel(model_name=cfg.model_architecture, pretrained=True, pool=cfg.pool, out_dim=cfg.output_size, dropout = cfg.dropout)
     return model
 
 def logfile(message):
@@ -159,6 +159,10 @@ def get_dataloader(cfg, fold_id):
     if cfg.mode in ['pseudo']:
         val_df = df
 
+    if cfg.mode in ['test']:
+        df = pd.read_csv('data/test_meta.csv')
+        val_df = df
+
     if cfg.debug:
         train_df = train_df.head(100)
         val_df = val_df.head(100)
@@ -177,7 +181,10 @@ def get_dataloader(cfg, fold_id):
     
     total_steps = len(train_dataset)
 
-    val_dataset = SIIMDataset(val_df, tfms=transforms_valid, cfg=cfg, mode='val')
+    if cfg.mode in ['test']:
+        val_dataset = SIIMDataset(val_df, tfms=transforms_valid, cfg=cfg, mode='test')
+    else:
+        val_dataset = SIIMDataset(val_df, tfms=transforms_valid, cfg=cfg, mode='val')
     val_loader = DataLoader(val_dataset, batch_size=cfg.batch_size, shuffle=False,  num_workers=8, pin_memory=True)
 
     return train_loader, val_loader, total_steps, val_df
@@ -291,6 +298,12 @@ def valid_func(model, valid_loader):
             images, targets = images.to(device), targets.to(device)
             origin_labels.append(targets.detach().cpu().numpy())
 
+            sz = images.size()[0]
+
+            flip = 0 
+            if flip:
+                images = torch.stack([images,images.flip(-1)],0) # hflip
+                images = images.view(-1, 3, images.shape[-1], images.shape[-1])
 
             predictions = model(images)
 
@@ -303,12 +316,11 @@ def valid_func(model, valid_loader):
             else:
                 logits = predictions
 
-
             if cfg.loss == 'ce':
                 loss = ce_criterion(logits, targets1.to(device))
             elif cfg.loss in ['bce', 'focal']:
                 if cfg.model in ['model_2_1', 'model_4_1']:
-                    loss = criterion(logits, targets) + criterion(prediction1, targets)
+                    loss = criterion(logits[:sz], targets) + criterion(prediction1[:sz], targets)
                 else:
                     loss = criterion(logits, targets)
             else:
@@ -319,7 +331,11 @@ def valid_func(model, valid_loader):
             else:
                 if cfg.loss in ['bce', 'focal']:
                     if cfg.model in ['model_2_1', 'model_4_1']:
-                        prediction = F.sigmoid(logits)/2 + F.sigmoid(prediction1)/2
+                        if flip:
+                            prediction = F.sigmoid(logits)/2 + F.sigmoid(prediction1)/2
+                            prediction = (prediction[:sz] + prediction[sz:]) / 2
+                        else:
+                            prediction = F.sigmoid(logits)/2 + F.sigmoid(prediction1)/2
                     else:
                         prediction = F.sigmoid(logits)
                 elif cfg.loss == 'ce':
@@ -351,7 +367,7 @@ def valid_func(model, valid_loader):
 
     aucs = []
     acc = []
-    for i in range(4):
+    for i in range(origin_labels.shape[1]):
         aucs.append(roc_auc_score(origin_labels[:, i], pred_probs[:, i]))
         acc.append(average_precision_score(origin_labels[:, i], pred_probs[:, i]))
 
@@ -364,9 +380,9 @@ def valid_func(model, valid_loader):
 
     loss_valid = np.mean(losses)
 
-    auc = np.mean(aucs)
+    auc = np.mean(aucs[:4])
 
-    acc = np.mean(acc)
+    acc = np.mean(acc[:4])
 
     map, ap_list = val_map(origin_labels, pred_probs)
 
@@ -380,6 +396,63 @@ def valid_func(model, valid_loader):
             neptune.log_metric(f'VAL map cls {cc}', ap)
 
     return loss_valid, micro_score, acc, auc, map, pred_probs
+
+def test_func(model, valid_loader):
+    model.eval()
+    bar = tqdm(valid_loader)
+
+    pred_probs = []
+
+    with torch.no_grad():
+        for batch_idx, batch_data in enumerate(bar):
+            images = batch_data 
+            # print(images.shape, len(batch_data))
+            images = images.to(device)
+
+            sz = images.size()[0]
+
+            flip = 0 
+            if flip:
+                images = torch.stack([images,images.flip(-1)],0) # hflip
+                images = images.view(-1, 3, images.shape[-1], images.shape[-1])
+
+            predictions = model(images)
+
+            if cfg.model in ['model_2_1']:
+                logits, prediction1 = predictions
+            elif cfg.model in ['model_4_1']:
+                logits, prediction1, seg_out = predictions
+            elif cfg.model in ['model_4']:
+                logits, seg_out = predictions
+            else:
+                logits = predictions
+
+
+            if cfg.model in ['model_2']: #use bceloss
+                prediction = logits
+            else:
+                if cfg.loss in ['bce', 'focal']:
+                    if cfg.model in ['model_2_1', 'model_4_1']:
+                        prediction = F.sigmoid(logits)/2 + F.sigmoid(prediction1)/2
+                        if flip:
+                            prediction = (prediction[:sz] + prediction[sz:]) / 2
+                    else:
+                        prediction = F.sigmoid(logits)
+                elif cfg.loss == 'ce':
+                    prediction = F.softmax(logits)
+                else:
+                    prediction = 0.5*F.sigmoid(logits) + 0.5*F.softmax(logits1)
+
+            proba = prediction.detach().cpu().numpy()
+
+            pred_probs.append(proba)
+
+            if batch_idx>30 and cfg.debug:
+                break
+            
+    pred_probs = np.concatenate(pred_probs)
+
+    return pred_probs
 
 def intersect_dicts(da, db, exclude=()):
     # Dictionary intersection of matching keys and shapes, omitting 'exclude' keys, using da values
@@ -431,15 +504,19 @@ if __name__ == "__main__":
 
             if cfg.weight_file:
                 exclude = []  # exclude keys
-                state_dict = torch.load(cfg.weight_file, map_location=device)  # load checkpoint
+                if '.pth' in cfg.weight_file:
+                    weight_file = cfg.weight_file
+                else:
+                    weight_file = cfg.weight_file + f'best_map_fold{fold_id}_st0.pth'
+                state_dict = torch.load(weight_file, map_location=device)  # load checkpoint
                 if cfg.use_seg:
                     state_dict = intersect_dicts(state_dict, model.model.state_dict(), exclude=exclude)  # intersect
                     model.model.load_state_dict(state_dict, strict=False)  # load
-                    print('Transferred %g/%g items from %s' % (len(state_dict), len(model.model.state_dict()), cfg.weight_file))  # report
+                    print('Transferred %g/%g items from %s' % (len(state_dict), len(model.model.state_dict()), weight_file))  # report
                 else:
                     state_dict = intersect_dicts(state_dict, model.state_dict(), exclude=exclude)  # intersect
                     model.load_state_dict(state_dict, strict=False)  # load
-                    print('Transferred %g/%g items from %s' % (len(state_dict), len(model.state_dict()), cfg.weight_file))  # report
+                    print('Transferred %g/%g items from %s' % (len(state_dict), len(model.state_dict()), weight_file))  # report
                 del state_dict
 
             if cfg.resume_training:
@@ -484,14 +561,6 @@ if __name__ == "__main__":
                     else:
                         torch.save(model.state_dict(), f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth')
                     best_score = score
-
-                # if loss_valid < loss_min:
-                #     logfile(f'loss_min ({loss_min:.6f} --> {loss_valid:.6f}). Saving model ...')
-                #     loss_min = loss_valid
-                #     if cfg.use_seg:
-                #         torch.save(model.model.state_dict(), f'{cfg.out_dir}/best_loss_fold{fold_id}_st{cfg.stage}.pth')
-                #     else:
-                #         torch.save(model.state_dict(), f'{cfg.out_dir}/best_loss_fold{fold_id}_st{cfg.stage}.pth')
 
                 if epoch == cfg.epochs:
                     if cfg.use_seg:
@@ -586,6 +655,35 @@ if __name__ == "__main__":
 
                 val(val_df)
                 val_df.to_csv(f'{cfg.out_dir}/pseudo_st{cfg.stage}.csv', index=False)
+
+            del model 
+            gc.collect()
+
+        elif cfg.mode in ['test']:
+            model = get_model(cfg).to(device)
+            # chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth'
+            chpt_path = f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth'
+            # chpt_path = f'{cfg.out_dir}/best_loss_fold{fold_id}_st{cfg.stage}.pth'
+            checkpoint = torch.load(chpt_path, map_location="cpu")
+            if cfg.use_seg:
+                model.model.load_state_dict(checkpoint)
+            else:
+                model.load_state_dict(checkpoint)
+            del checkpoint
+            gc.collect()
+
+            pred_probs = test_func(model, valid_loader)
+
+            if cc ==0:
+                pred_probs_all = pred_probs
+            else:
+                pred_probs_all += pred_probs
+            if cc == (len(cfg.folds)-1):
+                pred_probs_all /=len(cfg.folds)
+                for i in range(pred_probs_all.shape[1]):
+                    val_df[f'pred_cls{i+1}'] = pred_probs_all[:,i]
+
+                val_df.to_csv(f'{cfg.out_dir}/{cfg.name}_test_st{cfg.stage}.csv', index=False)
 
             del model 
             gc.collect()
