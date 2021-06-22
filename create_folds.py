@@ -42,7 +42,24 @@ df_image = pd.merge(df_image, df_meta, on="image_id")
 df_image['has_box'] = df_image['label'].apply(lambda x: 1*('none' in x))
 print(df_image['has_box'].value_counts())
 
-df_image.to_csv(f'{data_dir}/train_split_seed{seed}.csv', index=False)
+#remove unlabel images
+study_ids = df_image.study_id.unique()
+drop_ids = []
+for study_id in tqdm(study_ids):
+	temp_df = df_image[df_image.study_id==study_id]
+	if temp_df.shape[0]>1:
+		tmp = temp_df[temp_df.label != 'none 1 0 0 1 1']
+		if tmp.shape[0]>0:
+			has_box_id = list(tmp.id.values)
+			all_id = list(temp_df.id.values)
+			dr = [x for x in all_id if x not in has_box_id]
+			drop_ids.extend(dr)
+
+df_image = df_image.set_index('id')
+df_image = df_image.drop(drop_ids)
+#~remove unlabel images
+
+df_image.to_csv(f'{data_dir}/train_split_seed{seed}.csv', index=True)
 
 for fold_id in [0,1,2,3,4]:
 	print(f'\n========= FOLD {fold_id} ========')

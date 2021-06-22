@@ -7,3 +7,5 @@ detection/label*
 detection/*/runs/
 detection/*/__pycache__/
 */__pycache__/
+detection/efficientDet/weights/
+detection/efficientDet/pretrained/

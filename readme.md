@@ -1,4 +1,33 @@
 # SIIM COVID 2021
+## Directory Structure
+├── data
+│ ├── c14
+│   ├── images_001
+│   ├── images_002
+│   ├── images_003
+│   ├── ..........
+│   ├── Data_Entry_2017.csv
+│ ├── png512
+│   ├── train
+│   ├── test
+│ ├── train_study_level.csv
+│ ├── train_image_level.csv
+│ ├── meta.csv
+├── dataset
+│ ├── dataset.py
+├── configs
+│ ├── aug
+│ ├── n_cf1.py
+├── models
+│ ├── model_1.py
+├── utils
+│ ├── config.py
+├── create_folds.py
+├── main.py
+├── pretraining.py
+├── run.py
+├── valensemble.py
+
 ## Data
 * Download dataset to data/
 * run `python create_folds.py` to split train data into folds

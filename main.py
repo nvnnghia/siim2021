@@ -13,7 +13,7 @@ from glob import glob
 from utils.config import cfg
 from utils.map_func import val_map
 from utils.evaluate import val
-from utils.online_label_smooth import OnlineLabelSmoothing, FocalLoss
+from utils.losses import OnlineLabelSmoothing, FocalLoss, ROCLoss
 from dataset.dataset import SIIMDataset, BatchSampler
 from torch.utils.data import  DataLoader
 from torch.cuda.amp import GradScaler, autocast
@@ -163,6 +163,18 @@ def get_dataloader(cfg, fold_id):
         df = pd.read_csv('data/test_meta.csv')
         val_df = df
 
+    if cfg.mode in ['predict']:
+        df = pd.read_csv('data/edata.csv')
+        val_df = df
+
+    if cfg.use_edata:
+        e_df = pd.read_csv('outputs/n_cf11/n_cf11_predict_st2.csv')
+        e_df = e_df[e_df['fold'] != fold_id]
+        e_dataset = SIIMDataset(e_df, tfms=transforms_train, cfg=cfg, mode='edata')
+        e_loader = DataLoader(e_dataset, batch_size=cfg.batch_size, shuffle=True,  num_workers=8, pin_memory=True)
+    else:
+        e_loader = None
+
     if cfg.debug:
         train_df = train_df.head(100)
         val_df = val_df.head(100)
@@ -183,15 +195,21 @@ def get_dataloader(cfg, fold_id):
 
     if cfg.mode in ['test']:
         val_dataset = SIIMDataset(val_df, tfms=transforms_valid, cfg=cfg, mode='test')
+    if cfg.mode in ['predict']:
+        val_dataset = SIIMDataset(val_df, tfms=transforms_valid, cfg=cfg, mode='predict')
     else:
         val_dataset = SIIMDataset(val_df, tfms=transforms_valid, cfg=cfg, mode='val')
     val_loader = DataLoader(val_dataset, batch_size=cfg.batch_size, shuffle=False,  num_workers=8, pin_memory=True)
 
-    return train_loader, val_loader, total_steps, val_df
+    return train_loader, val_loader, total_steps, val_df, e_loader
 
-def train_func(model, train_loader, scheduler, device, epoch):
+def train_func(model, train_loader, scheduler, device, epoch, tr_it):
     model.train()
     start_time = time.time()
+    if cfg.loss in ['roc']:
+        whole_y_pred=np.array([])
+        whole_y_pred1=np.array([])
+        whole_y_t=np.array([])
     losses = []
     bar = tqdm(train_loader)
     for batch_idx, batch_data in enumerate(bar):
@@ -199,6 +217,23 @@ def train_func(model, train_loader, scheduler, device, epoch):
             images, targets, oof_targets, targets1, hms = batch_data
         else:
             images, targets, oof_targets, targets1 = batch_data
+
+        if cfg.use_edata:
+            try:
+                e_batch_data = next(tr_it)
+            except:
+                print('RESET EDATA LOADER!!')
+                tr_it = iter(e_loader)
+                e_batch_data = next(tr_it)
+
+            if cfg.use_seg:
+                e_images, e_targets, e_oof_targets, e_targets1, e_hms = e_batch_data
+            else:
+                e_images, e_targets, e_oof_targets, e_targets1 = e_batch_data
+
+            images = torch.cat([images, e_images], 0)
+            targets = torch.cat([targets, e_targets], 0)
+            oof_targets = torch.cat([oof_targets, e_targets], 0)
 
         # print(images.shape, targets.shape)
         if cfg["mixed_precision"]:
@@ -225,6 +260,14 @@ def train_func(model, train_loader, scheduler, device, epoch):
                 loss = 0.5*criterion(prediction, targets.to(device)) + 0.5*criterion(prediction1, targets.to(device))
             else:
                 loss = criterion(prediction, targets.to(device))
+        elif cfg.loss in ['roc']:
+            whole_y_pred = np.append(whole_y_pred, prediction.clone().detach().cpu().numpy())
+            whole_y_t    = np.append(whole_y_t, targets.clone().detach().cpu().numpy())
+            if cfg.model in ['model_2_1', 'model_4_1']:
+                loss = 0.5*roc_criterion(prediction, targets.to(device), epoch) + 0.5*roc_criterion1(prediction1, targets.to(device), epoch)
+                whole_y_pred1 = np.append(whole_y_pred1, prediction1.clone().detach().cpu().numpy())
+            else:
+                loss = roc_criterion(prediction, targets.to(device), epoch)
         else:
             loss = 0.2*ce_criterion(prediction1, targets1.to(device)) + 0.5*criterion(prediction, targets.to(device))
 
@@ -275,8 +318,16 @@ def train_func(model, train_loader, scheduler, device, epoch):
         if batch_idx>10 and cfg.debug:
             break
 
+    if cfg.loss in ['roc']:
+        last_whole_y_t = torch.tensor(whole_y_t).cuda()
+        last_whole_y_pred = torch.tensor(whole_y_pred).cuda()
+        roc_criterion.update(last_whole_y_t, last_whole_y_pred, epoch)
+        if cfg.model in ['model_2_1', 'model_4_1']:
+            last_whole_y_pred1 = torch.tensor(whole_y_pred1).cuda()
+            roc_criterion1.update(last_whole_y_t, last_whole_y_pred1, epoch)
+
     loss_train = np.mean(losses)
-    return loss_train
+    return loss_train, tr_it
 
 def valid_func(model, valid_loader):
     model.eval()
@@ -472,7 +523,7 @@ if __name__ == "__main__":
     oofs = []
     for cc, fold_id in enumerate(cfg.folds):
         log_path = f'{cfg.out_dir}/log_f{fold_id}_st{cfg.stage}.txt'
-        train_loader, valid_loader, total_steps, val_df = get_dataloader(cfg, fold_id)
+        train_loader, valid_loader, total_steps, val_df, e_loader = get_dataloader(cfg, fold_id)
         total_steps = total_steps*cfg.epochs
         print(f'======== FOLD {fold_id} ========')
         if cfg.dp:
@@ -498,6 +549,9 @@ if __name__ == "__main__":
                 ce_criterion.to(device)
             elif cfg.loss in ['focal']:
                 criterion = FocalLoss()
+            elif cfg.loss in ['roc']:
+                roc_criterion = ROCLoss()
+                roc_criterion1 = ROCLoss()
 
             if cfg.use_seg:
                 seg_criterion = torch.nn.MSELoss()
@@ -542,13 +596,17 @@ if __name__ == "__main__":
                 neptune.append_tag(f'use_seg {cfg.use_seg}')
                 neptune.append_tag(f'{cfg.model}')
 
-        
+            if cfg.use_edata:
+                tr_it = iter(e_loader)
+            else:
+                tr_it = None
+
             loss_min = 1e6
             map_score_max = 0
             best_score = 0
             for epoch in range(1, cfg.epochs+1):
                 logfile(f'====epoch {epoch} ====')
-                loss_train = train_func(model, train_loader, scheduler, device, epoch)
+                loss_train, tr_it = train_func(model, train_loader, scheduler, device, epoch, tr_it)
                 loss_valid, micro_score, acc, auc, map, pred_probs = valid_func(model, valid_loader)
                 if cfg.loss in ['ce', 'all']:
                     ce_criterion.next_epoch()
@@ -659,7 +717,7 @@ if __name__ == "__main__":
             del model 
             gc.collect()
 
-        elif cfg.mode in ['test']:
+        elif cfg.mode in ['test', 'predict']:
             model = get_model(cfg).to(device)
             # chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth'
             chpt_path = f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth'
@@ -683,7 +741,7 @@ if __name__ == "__main__":
                 for i in range(pred_probs_all.shape[1]):
                     val_df[f'pred_cls{i+1}'] = pred_probs_all[:,i]
 
-                val_df.to_csv(f'{cfg.out_dir}/{cfg.name}_test_st{cfg.stage}.csv', index=False)
+                val_df.to_csv(f'{cfg.out_dir}/{cfg.name}_{cfg.mode}_st{cfg.stage}.csv', index=False)
 
             del model 
             gc.collect()

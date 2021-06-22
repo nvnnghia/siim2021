@@ -86,8 +86,13 @@ class SIIMDataset(Dataset):
         self.mode = mode
         self.transform = tfms
 
-        if self.mode not in ['test']:
-            self.labels = self.df.targets.values
+        if self.mode not in ['test', 'predict']:
+            if self.mode in ['train', 'val']:
+                self.labels = self.df.targets.values
+            elif self.mode in ['edata']:
+                print('====', self.df.shape)
+                cols = [f'pred_cls{i+1}' for i in range(cfg.output_size)]
+                self.labels = self.df[cols].values
             if cfg.stage > 0:
                 cols = [f'pred_cls{i+1}' for i in range(cfg.output_size)]
                 self.oof_labels = self.df[cols].values
@@ -107,16 +112,21 @@ class SIIMDataset(Dataset):
             index,input_size = item,self.cfg.input_size
 
         row = self.df.loc[index]
-        if self.mode in 'test':
+        if self.mode in ['test']:
             path = f'{self.cfg.image_dir}/test/{row.image_id}.png'
+        elif self.mode in ['predict'] or self.mode in ['edata']:
+            path = f'data/{row.values[0]}'
         else:
             path = f'{self.cfg.image_dir}/train/{row.id[:-6]}.png'
         img = cv2.imread(path)  
-        # img = cv2.resize(img, (input_size, input_size))
+
+        if self.mode in ['predict']:
+            img = cv2.resize(img, (512, 512))
+
         if self.cfg.histogram_norm:
             img = do_histogram_norm(img).astype(np.uint8)
 
-        if self.mode not in ['test']:
+        if self.mode not in ['test', 'predict'] and self.mode not in ['edata']:
             if self.cfg.use_seg or self.cfg.output_size>4:
                 a = row.label 
                 a = np.array(a.split(' ')).reshape(-1,6)
@@ -148,15 +158,17 @@ class SIIMDataset(Dataset):
             img = res['image']
 
         img = self.tensor_tfms(img)
-        if self.mode == 'test':
+        if self.mode in ['test', 'predict']:
             return img
         else:
 
-            label = torch.zeros(self.cfg.output_size)
-            label[self.labels[index]-1] = 1
-
-            if self.cfg.output_size>4 and len(boxes)>0:
-                label[4] = 1
+            if self.mode in ['train', 'val']:
+                label = torch.zeros(self.cfg.output_size)
+                label[self.labels[index]-1] = 1
+                if self.cfg.output_size>4 and len(boxes)>0:
+                    label[4] = 1
+            else:
+                label = torch.tensor(self.labels[index])
 
             oof_label = torch.zeros(self.cfg.output_size)
             if self.cfg.stage>0:

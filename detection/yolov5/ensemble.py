@@ -286,7 +286,8 @@ if __name__ == '__main__':
     is_wbf2 = False
 
     if not is_wbf2:
-        yolov5_files = glob('outputs/test_txt_005/*.txt')
+        # yolov5_files = glob('outputs/test_txt_005/*.txt')
+        yolov5_files = glob('outputs/val_txt/*.txt')
 
     else:
         yolov5_files = glob('yolov5/test_txt_005_wbf2/*best*.txt')
@@ -307,8 +308,8 @@ if __name__ == '__main__':
         det_data.append(yolov5_dets)
         weights.append(1)
 
-    # image_list, label_list = get_data('data/test_pos_005.txt')
-    image_list = glob('../../data/png512/test/*.png')
+    image_list = glob('../../data/png512/train/*.png')
+    # image_list = glob('../../data/png512/test/*.png')
 
     # image_list1 = glob('data/test/*')
     # image_list = [x for x in image_list1 if f'../{x}' not in image_list]

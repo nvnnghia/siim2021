@@ -9,7 +9,7 @@ cfg = {
     "image_dir": "data/png512",
     "train_csv_path": "data/train_split_seed42.csv",
     "input_size": 384,
-    "output_size": 5,
+    "output_size": 4,
     "use_seg":False,
     "out_dir": f"{outputdir}",
     "folds": [0, 1, 2, 3, 4],
@@ -37,6 +37,7 @@ cfg = {
     "mode": "train",
     "loss": 'bce',
     "muliscale": 0,
+    "use_edata":1,
 }
 
 # swin_large_patch4_window12_384 vit_large_patch16_384
