@@ -12,7 +12,7 @@ cfg = {
     "output_size": 15,
     "use_seg":False,
     "out_dir": f"{outputdir}/tf_efficientnet_b5_ns",
-    "folds": [1,2,3,4],
+    "folds": [0,1,2,3,4],
     "augmentation": "s_0220/0220_hf_cut_sm2_0.75_384.yaml",
     "weight_file": None,  # "/model_state_45000.pth",
     "resume_training": False,
