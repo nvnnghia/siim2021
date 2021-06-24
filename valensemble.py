@@ -28,10 +28,25 @@ oof_list = [
 	# 'outputs/n_cf7_5cls/oofs3.csv',
 	# 'outputs/n_cf7_5cls/oofs4.csv',
 
-	'outputs/n_cf11/oofs2.csv', #611
+	# 'outputs/n_cf11/oofs2.csv', #611
 	# 'outputs/n_cf11/oofs3.csv', #608
 	# 'outputs/n_cf11/oofs4.csv', #610
+
+	'outputs/n_cf13/oofs2.csv', #613
+	'outputs/n_cf13/oofs3.csv', #617
+
+	# 'outputs/n_cf14/oofs3.csv', #611
+	# 'outputs/n_cf14/oofs2.csv', #608
+	# 'outputs/n_cf14/oofs4.csv', #611
+
+	# 'outputs/n_cf15/oofs3.csv', #608
+	'outputs/n_cf16/oofs3.csv', #611
+
+	# 'outputs/n_cf11/oofs2.csv', #611
+	# 'outputs/n_cf11/oofs3.csv', #608
 ]
+
+weights = [1, 1, 1, 1]
 
 df = pd.read_csv(oof_list[0])
 
@@ -39,14 +54,16 @@ df = pd.read_csv(oof_list[0])
 # 	df[col] = pd.Series(df[col].values).rank(pct = True).values
 # print(df[df.targets==0].shape) #1726 - 3007 - 1108 - 483
 
-for path in oof_list[1:]:
+for path, w in zip(oof_list[1:], weights[1:]):
 	df1 = pd.read_csv(path)
-	df[['pred_cls1', 'pred_cls2', 'pred_cls3' ,'pred_cls4']] += df1[['pred_cls1', 'pred_cls2', 'pred_cls3' ,'pred_cls4']]
+	df1 = df[["image_id"]].merge(df1, on=["image_id"])
 
 	# for col in ['pred_cls1', 'pred_cls2', 'pred_cls3' ,'pred_cls4']:
-	# 	df[col] += pd.Series(df1[col].values).rank(pct = True).values
+	# 	df1[col] = pd.Series(df1[col].values).rank(pct = True).values
 
-df[['pred_cls1', 'pred_cls2', 'pred_cls3' ,'pred_cls4']] /= len(oof_list)
+	df[['pred_cls1', 'pred_cls2', 'pred_cls3' ,'pred_cls4']] += w*df1[['pred_cls1', 'pred_cls2', 'pred_cls3' ,'pred_cls4']]
+
+df[['pred_cls1', 'pred_cls2', 'pred_cls3' ,'pred_cls4']] /= sum(weights)
 
 # true_count = [1726,3007,1181,483]
 # scale_factors = [1,1,1,1]

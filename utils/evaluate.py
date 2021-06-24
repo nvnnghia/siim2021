@@ -19,3 +19,13 @@ def val(df):
 
     map, ap_list = val_map(origin_labels, pred_probs)
     print((f'MAP: {map}, ap list: {ap_list}'))
+
+    try:
+        origin_labels[:, 0] = (df['has_box'].values-1)*(-1)
+        pred_probs[:, 0] = df['pred_cls5'].values
+        print(roc_auc_score(origin_labels[:, 0], pred_probs[:, 0]))
+        print(average_precision_score(origin_labels[:, 0], pred_probs[:, 0]))
+        map, ap_list = val_map(origin_labels, pred_probs)
+        print((f'{ap_list[0]}'))
+    except:
+        pass

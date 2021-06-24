@@ -85,7 +85,7 @@ class SIIMDataset(Dataset):
         self.df = df.reset_index(drop=True)
         self.mode = mode
         self.transform = tfms
-
+        # print(self.mode)
         if self.mode not in ['test', 'predict']:
             if self.mode in ['train', 'val']:
                 self.labels = self.df.targets.values
@@ -120,7 +120,11 @@ class SIIMDataset(Dataset):
             path = f'{self.cfg.image_dir}/train/{row.id[:-6]}.png'
         img = cv2.imread(path)  
 
-        if self.mode in ['predict']:
+        if self.cfg.use_lung_seg:
+            mask = cv2.imread(f'segmentation/draw/train/{path.split("/")[-1]}', 0)
+            img[:,:,0] = mask
+
+        if self.mode in ['predict', 'edata']:
             img = cv2.resize(img, (512, 512))
 
         if self.cfg.histogram_norm:
@@ -208,6 +212,10 @@ class C14Dataset(Dataset):
         else:
             print('file does not exist!! ', path)
         img = cv2.imread(path)  
+        img = cv2.resize(img, (512, 512))
+        if self.cfg.use_lung_seg:
+            mask = cv2.imread(f'segmentation/draw/c14/{path.split("/")[-1]}', 0)
+            img[:,:,0] = mask 
 
         if self.transform is not None:
             res = self.transform(image=img)

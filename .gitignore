@@ -9,3 +9,7 @@ detection/*/__pycache__/
 */__pycache__/
 detection/efficientDet/weights/
 detection/efficientDet/pretrained/
+segmentation/__pycache__/
+segmentation/draw/
+segmentation/data/
+segmentation/weights/

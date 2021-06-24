@@ -40,6 +40,8 @@ if "histogram_norm" not in cfg.keys():
     cfg["histogram_norm"] = 0
 if "use_edata" not in cfg.keys():
     cfg["use_edata"] = 0
+if "use_lung_seg" not in cfg.keys():
+    cfg["use_lung_seg"] = 0
     
 cfg["mode"] = parser_args.mode
 cfg["seed"] += int(parser_args.stage)

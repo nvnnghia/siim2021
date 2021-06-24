@@ -164,11 +164,12 @@ def get_dataloader(cfg, fold_id):
         val_df = df
 
     if cfg.mode in ['predict']:
-        df = pd.read_csv('data/edata.csv')
+        df = pd.read_csv('data/edata_all.csv')
         val_df = df
 
-    if cfg.use_edata:
+    if cfg.use_edata and cfg.mode not in ['test']:
         e_df = pd.read_csv('outputs/n_cf11/n_cf11_predict_st2.csv')
+        # e_df = pd.read_csv('outputs/n_cf13/n_cf13_predict_st3.csv')
         e_df = e_df[e_df['fold'] != fold_id]
         e_dataset = SIIMDataset(e_df, tfms=transforms_train, cfg=cfg, mode='edata')
         e_loader = DataLoader(e_dataset, batch_size=cfg.batch_size, shuffle=True,  num_workers=8, pin_memory=True)
@@ -195,7 +196,7 @@ def get_dataloader(cfg, fold_id):
 
     if cfg.mode in ['test']:
         val_dataset = SIIMDataset(val_df, tfms=transforms_valid, cfg=cfg, mode='test')
-    if cfg.mode in ['predict']:
+    elif cfg.mode in ['predict']:
         val_dataset = SIIMDataset(val_df, tfms=transforms_valid, cfg=cfg, mode='predict')
     else:
         val_dataset = SIIMDataset(val_df, tfms=transforms_valid, cfg=cfg, mode='val')
