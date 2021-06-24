@@ -123,20 +123,20 @@ eca_nfnet_l1 | oof | 4 | 0.610 | 0.839 | 2_1 | 384 | 0.828 | 0.865 | 0.338 | 0.4
 
 Model | FOLD | stage | mAP | AUC | model type | input size |edata| config
 --- | --- | --- | --- |--- |--- |--- |--- |---
-swin_base_patch4_window12_384 | oof | 0 | 0.565 | 0.811 | 1 | 384| bimcv+ricord | -
-eca_nfnet_l1 | oof | 0 | 0.577 | 0.821 | 2_1 | 384 | bimcv+ricord | n_cf15 (5cls)
-eca_nfnet_l1 | oof | 1 | 0.599 | 0.833 | 2_1 | 384 | bimcv+ricord | n_cf15 (5cls)
-eca_nfnet_l1 | oof | 2 | 0.614 | 0.842 | 2_1 | 384 | bimcv+ricord | n_cf15 (5cls)
-eca_nfnet_l1 | oof | 3 | 0.619 | 0.844 | 2_1 | 384 | bimcv+ricord | n_cf15 (5cls)
+swin_base_patch4 _window12_384 | oof | 0 | 0.565 | 0.811 | 1 | 384| bimcv+ricord | -
+eca_nfnet_l1 | oof | 0 | 0.577 | 0.821 | 2_1 | 384 | bimcv+ricord | n_cf15-(5cls)
+eca_nfnet_l1 | oof | 1 | 0.599 | 0.833 | 2_1 | 384 | bimcv+ricord | n_cf15-(5cls)
+eca_nfnet_l1 | oof | 2 | 0.614 | 0.842 | 2_1 | 384 | bimcv+ricord | n_cf15-(5cls)
+eca_nfnet_l1 | oof | 3 | 0.619 | 0.844 | 2_1 | 384 | bimcv+ricord | n_cf15-(5cls)
 eca_nfnet_l1 | oof | 3 | 0.630 | 0.845 | 2_1 | 384 | all | n_cf15_1 (5cls)
-eca_nfnet_l1 | oof | 0 | 0.577 | 0.821 | 2_1 | 384 | bimcv+ricord | n_cf13 (5cls)
-eca_nfnet_l1 | oof | 1 | 0.600 | 0.834 | 2_1 | 384 | bimcv+ricord | n_cf13 (5cls)
-eca_nfnet_l1 | oof | 2 | 0.613 | 0.841 | 2_1 | 384 | bimcv+ricord | n_cf13 (5cls)
-eca_nfnet_l1 | oof | 3 | 0.617 | 0.844 | 2_1 | 384 | bimcv+ricord | n_cf13 (5cls)
-eca_nfnet_l0 | oof | 0 | 0.579 | 0.820 | 2_1 | 384 | bimcv+ricord | n_cf14 (4cls)
-eca_nfnet_l0 | oof | 1 | 0.602 | 0.835 | 2_1 | 384 | bimcv+ricord | n_cf14 (4cls)
-eca_nfnet_l0 | oof | 2 | 0.608 | 0.839 | 2_1 | 384 | bimcv+ricord | n_cf14 (4cls)
-eca_nfnet_l0 | oof | 3 | 0.611 | 0.842 | 2_1 | 384 | bimcv+ricord | n_cf14 (4cls)
+eca_nfnet_l1 | oof | 0 | 0.577 | 0.821 | 2_1 | 384 | bimcv+ricord | n_cf13-(5cls)
+eca_nfnet_l1 | oof | 1 | 0.600 | 0.834 | 2_1 | 384 | bimcv+ricord | n_cf13-(5cls)
+eca_nfnet_l1 | oof | 2 | 0.613 | 0.841 | 2_1 | 384 | bimcv+ricord | n_cf13-(5cls)
+eca_nfnet_l1 | oof | 3 | 0.617 | 0.844 | 2_1 | 384 | bimcv+ricord | n_cf13-(5cls)
+eca_nfnet_l0 | oof | 0 | 0.579 | 0.820 | 2_1 | 384 | bimcv+ricord | n_cf14-(4cls)
+eca_nfnet_l0 | oof | 1 | 0.602 | 0.835 | 2_1 | 384 | bimcv+ricord | n_cf14-(4cls)
+eca_nfnet_l0 | oof | 2 | 0.608 | 0.839 | 2_1 | 384 | bimcv+ricord | n_cf14-(4cls)
+eca_nfnet_l0 | oof | 3 | 0.611 | 0.842 | 2_1 | 384 | bimcv+ricord | n_cf14-(4cls)
 
 * Multiple stage training with segmentation channel
 
