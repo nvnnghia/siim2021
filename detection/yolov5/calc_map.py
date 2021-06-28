@@ -323,10 +323,10 @@ def map_calc(det_path, gt_path, output_filename):
 
 if __name__ == '__main__':
     MINOVERLAP = 0.5 # default IOU value 
-    # gt_path = '../data/val_gt_s42_f0.txt'
+    # gt_path = '../data/val_gt_s42_f4.txt'
     gt_path = '../data/val_gt_s42_all.txt'
-    det_path = 'aa_post.txt'
-    # det_path = '../yolov4_opencv/v4.txt'
+    det_path = 'test_v5neg_0.txt'
+    # det_path = '../efficientDet/outputs/val_txt/weights_effdet6_fold4_best_checkpoint_055epoch.txt'
     output_filename = 'map.txt'
     map_calc(det_path=det_path, gt_path=gt_path, output_filename=output_filename)
 

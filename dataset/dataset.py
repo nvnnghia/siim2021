@@ -120,12 +120,17 @@ class SIIMDataset(Dataset):
             path = f'{self.cfg.image_dir}/train/{row.id[:-6]}.png'
         img = cv2.imread(path)  
 
-        if self.cfg.use_lung_seg:
-            mask = cv2.imread(f'segmentation/draw/train/{path.split("/")[-1]}', 0)
-            img[:,:,0] = mask
-
         if self.mode in ['predict', 'edata']:
             img = cv2.resize(img, (512, 512))
+
+        if self.cfg.use_lung_seg:
+            if self.mode in ['edata']:
+                mask = cv2.imread(f'segmentation/draw/edata/{path.split("/")[-1]}', 0)
+            elif self.mode in ['test']:
+                mask = cv2.imread(f'segmentation/draw/test/{path.split("/")[-1]}', 0)
+            else:
+                mask = cv2.imread(f'segmentation/draw/train/{path.split("/")[-1]}', 0)
+            img[:,:,0] = mask
 
         if self.cfg.histogram_norm:
             img = do_histogram_norm(img).astype(np.uint8)
@@ -168,9 +173,18 @@ class SIIMDataset(Dataset):
 
             if self.mode in ['train', 'val']:
                 label = torch.zeros(self.cfg.output_size)
-                label[self.labels[index]-1] = 1
-                if self.cfg.output_size>4 and len(boxes)>0:
-                    label[4] = 1
+                if self.cfg.output_size ==2:
+                    if row.has_box ==0:
+                        label[1] = 1
+                    else:
+                        label[0] = 1
+                elif self.cfg.output_size ==1:
+                    if row.has_box ==0:
+                        label[0] = 1
+                else:
+                    label[self.labels[index]-1] = 1
+                    if self.cfg.output_size>4 and len(boxes)>0:
+                        label[4] = 1
             else:
                 label = torch.tensor(self.labels[index])
 

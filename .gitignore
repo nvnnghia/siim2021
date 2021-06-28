@@ -6,6 +6,7 @@ detection/*cache
 detection/label*
 detection/*/runs/
 detection/*/__pycache__/
+detection/yolov5/*csv
 */__pycache__/
 detection/efficientDet/weights/
 detection/efficientDet/pretrained/

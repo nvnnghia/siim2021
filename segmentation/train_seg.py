@@ -167,7 +167,7 @@ def test_func(model, test_dataset):
                 # cv2.imwrite(f'draw/test/{count}.png', image)
 
                 seg = cv2.resize(seg, (512,512))
-                cv2.imwrite(f'draw/c14/{path.split("/")[-1]}', seg)
+                cv2.imwrite(f'draw/test/{path.split("/")[-1]}', seg)
                 count +=1
 
 
@@ -235,8 +235,14 @@ if __name__ == '__main__':
         checkpoint = torch.load(chpt_path, map_location="cpu")
         model.load_state_dict(checkpoint)
 
-        # test_image_paths = glob('../data/png512/train/*.png')
-        test_image_paths = glob('../data/c14/*/images/*.png')
+        test_image_paths = glob('../data/png512/test/*.png')
+        # test_image_paths = glob('../data/c14/*/images/*.png')
+
+        # path1 = glob('../data/ricord1024/*jpg')
+        # path2 = glob('../data/png512/test/*png')
+        # path3 = glob('../data/bimcv1024/*png')
+        # path4 = glob('../data/v7-labs/data/images/*')
+        # test_image_paths = path1 + path2 + path3 + path4
 
         print(len(test_image_paths))
 

@@ -14,7 +14,8 @@ cfg = {
     "out_dir": f"{outputdir}",
     "folds": [0, 1, 2, 3, 4],
     "augmentation": "s_0220/0220_hf_cut_sm2_0.75_512.yaml",
-    "weight_file": None,  # "/model_state_45000.pth",
+    # "weight_file": None,  # "/model_state_45000.pth",
+    "weight_file": "outputs/n_cf2_pretraining_2/eca_nfnet_l1_1/best_loss_fold0_st0.pth", 
     "resume_training": False,
     "dropout": 0.5,
     "pool": "gem",
@@ -31,7 +32,7 @@ cfg = {
     "neptune_project": None,  
     # "neptune_project": "nvnn/siim2021",
     "scheduler": "cosine", #linear  cosine
-    "model": "model_1",
+    "model": "model_2_1",
     "epochs": 15,
     "mode": "train",
     'loss': 'bce',

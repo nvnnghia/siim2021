@@ -436,7 +436,7 @@ def valid_func(model, valid_loader):
 
     acc = np.mean(acc[:4])
 
-    map, ap_list = val_map(origin_labels, pred_probs)
+    map, ap_list = val_map(origin_labels, pred_probs, cfg.output_size)
 
     if cfg.neptune_project and cfg.mode == 'train':
         neptune.log_metric('VAL loss', loss_valid)
@@ -677,7 +677,8 @@ if __name__ == "__main__":
 
             if cc == (len(cfg.folds)-1):
                 oof_df = pd.concat(oofs)
-                val(oof_df)
+                if cfg.output_size>2:
+                    val(oof_df)
                 oof_df.to_csv(f'{cfg.out_dir}/oofs{cfg.stage}.csv', index=False)
 
             del model 
@@ -712,7 +713,8 @@ if __name__ == "__main__":
                 for i in range(pred_probs_all.shape[1]):
                     val_df[f'pred_cls{i+1}'] = pred_probs_all[:,i]
 
-                val(val_df)
+                if cfg.output_size>2:
+                    val(val_df)
                 val_df.to_csv(f'{cfg.out_dir}/pseudo_st{cfg.stage}.csv', index=False)
 
             del model 

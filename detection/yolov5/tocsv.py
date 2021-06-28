@@ -57,4 +57,4 @@ for img_id, det_boxes in dets.items():
 
 print(len(results))
 df = pd.DataFrame(results, columns=['image_id', 'PredictionString'])
-df.to_csv('sub.csv', index=False)
+df.to_csv('v5_sml.csv', index=False)

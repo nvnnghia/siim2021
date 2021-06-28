@@ -1,14 +1,9 @@
 from __future__ import division
 
 import sys
-try:
-    sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
-except:
-    pass
-
-import sys
 # sys.path.insert(0, "./timm-efficientdet-pytorch-small-anchor")
 sys.path.insert(0, "./efficientdet")
+sys.path.append("/home/pintel/nvnn/py37env/lib/python3.7/site-packages/")
 
 from ensemble_boxes import *
 import torch
@@ -25,6 +20,8 @@ from effdet.efficientdet import HeadNet
 from tqdm import tqdm
 from map import calculate_image_precision, calculate_image_precision_f1
 import warnings
+from warnings import filterwarnings
+filterwarnings("ignore")
 
 INPUT_SIZE= 512 
 
@@ -57,7 +54,7 @@ def get_train_data(datatxt='../data/alltrain.txt', fold=0):
 
     return image_list, val_image_list, label_list, val_label_list
 
-def getBoxes_yolo(label_path, im_w=1024, im_h=1024):
+def getBoxes_yolo(label_path, im_w=512, im_h=512):
     with open(label_path) as f:
         lines = f.readlines()
     boxes = []
@@ -79,12 +76,13 @@ class DatasetRetriever(Dataset):
 
     def __getitem__(self, index: int):
         image_path = self.image_list[index]
-        if 'final/' in image_path:
-            image_path = image_path.split('final/')[-1]
-        elif '../' in image_path:
-            image_path = image_path.replace('../','')
-        else:
-            image_path = image_path.split('yolov5/data/')[-1]
+        # if 'final/' in image_path:
+        #     image_path = image_path.split('final/')[-1]
+        # elif '../' in image_path:
+        #     image_path = image_path.replace('../','')
+        # else:
+        #     image_path = image_path.split('yolov5/data/')[-1]
+
         image = cv2.imread(image_path, cv2.IMREAD_COLOR)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB).astype(np.float32)
         image /= 255.0
@@ -443,10 +441,10 @@ for tta_combination in tta_combinations:
 print('len tta_transform:',len(tta_transforms))
 
 
-def load_net(checkpoint_path):
-    config = get_efficientdet_config('tf_efficientdet_d6')
+def load_net(checkpoint_path, model_name = 'tf_efficientdet_d6'):
+    config = get_efficientdet_config(model_name)
     net = EfficientDet(config, pretrained_backbone=False)
-    config.num_classes = 14
+    config.num_classes = 1
     config.image_size = INPUT_SIZE
     net.class_net = HeadNet(config, num_outputs=config.num_classes, norm_kwargs=dict(eps=.001, momentum=.01))
     checkpoint = torch.load(checkpoint_path)
@@ -509,16 +507,24 @@ def make_tta_predictions(images, score_threshold=0.001):
         gc.collect()
     return predictions
 
-def run_wbf(predictions, image_index, image_size=INPUT_SIZE, iou_thr=0.55, skip_box_thr=0.001, weights=None):
-    boxes = [(prediction[image_index]['boxes']/(image_size-1)).tolist()  for prediction in predictions]
-    scores = [prediction[image_index]['scores'].tolist()  for prediction in predictions]
-    labels = [prediction[image_index]['labels'].tolist()  for prediction in predictions]
+def run_wbf(predictions, image_index, image_size=INPUT_SIZE, iou_thr=0.5, skip_box_thr=0.001, weights=None):
+    boxes = np.array([(prediction[image_index]['boxes']/(image_size-1)).tolist()  for prediction in predictions])
+    scores = np.array([prediction[image_index]['scores'].tolist()  for prediction in predictions])
+    labels = np.array([prediction[image_index]['labels'].tolist()  for prediction in predictions])
+
+    # preds_sorted_idx = np.argsort(scores)[::-1]
+    # boxes = boxes[preds_sorted_idx[:100]]
+    # labels = labels[preds_sorted_idx[:100]]
+    # scores = scores[preds_sorted_idx[:100]]
+
+    # print(boxes.shape, scores.shape)
+
     boxes, scores, labels = weighted_boxes_fusion(boxes, scores, labels, weights=None, iou_thr=iou_thr, skip_box_thr=skip_box_thr)
     # boxes, scores, labels = weighted_boxes_fusion_customized(boxes, scores, labels, weights=None, iou_thr=iou_thr, skip_box_thr=skip_box_thr)
     boxes = boxes*(image_size-1)
     return boxes, scores, labels
 
-def getBoxes_yolo(label_path, im_w=1024, im_h=1024):
+def getBoxes_yolo(label_path, im_w=512, im_h=512):
     with open(label_path) as f:
         lines = f.readlines()
     # boxes = []
@@ -535,21 +541,24 @@ def getBoxes_yolo(label_path, im_w=1024, im_h=1024):
         gt_boxes[cls].append([xmin, ymin, xmax, ymax])
     return gt_boxes
 
-weight_path = 'weights/d6_f0_512/best-checkpoint-089epoch.bin'
-net = load_net(weight_path)
+model_name = 'tf_efficientdet_d1'
+weight_path = 'weights/effdet6_fold0/best_checkpoint_076epoch.bin'
+net = load_net(weight_path, model_name)
 device = torch.device("cuda")
 
-num_classes = 14
-fold=2
+num_classes = 1
+fold=4
 f_thres= 0.3
-# is_eval = True
+is_eval = True
 is_eval = False
 if is_eval:
-    train_list_path, valid_list_path, train_label_path, valid_label_path = get_train_data(datatxt='data/alltrain.txt', fold=fold)
-    outpath = 'val_txt/' + weight_path.replace('/','_').replace('.bin', '.txt').replace('-', '_')
+    # train_list_path, valid_list_path, train_label_path, valid_label_path = get_train_data(datatxt='data/alltrain.txt', fold=fold)
+    valid_list_path, valid_label_path = get_data(datatxt=f'../data/val_f{fold}_s42_cls1.txt')
+    outpath = 'outputs/val_txt/' + weight_path.replace('/','_').replace('.bin', '.txt').replace('-', '_')
 else:
-    valid_list_path, valid_label_path = get_data('data/test_pos_005.txt')
-    outpath = 'test_txt_005/' + weight_path.replace('/','_').replace('.bin', '.txt').replace('-', '_')
+    # valid_list_path, valid_label_path = get_data('data/test_pos_005.txt')
+    valid_list_path = glob('../../data/png512/test/*.png')
+    outpath = 'outputs/test_txt/' + weight_path.replace('/','_').replace('.bin', '.txt').replace('-', '_')
     
 dataset = DatasetRetriever(
     image_path=valid_list_path,
@@ -566,7 +575,7 @@ data_loader = DataLoader(
 )
 
 
-iou_thresholds_05 = [0.4]
+iou_thresholds_05 = [0.5]
 area_list = [(0,800),(800,1500),(1500,3000),(3000,8000),(8000,1e16)]
 results = {}
 for i in range(num_classes):
@@ -578,12 +587,12 @@ print(outpath)
 count=0
 file = open(outpath, 'w')
 for images, image_ids in data_loader:
-    # predictions = make_predictions(images)
-    predictions = make_tta_predictions(images)
+    predictions = make_predictions(images)
+    # predictions = make_tta_predictions(images)
     for i, image in enumerate(images):
         boxes, scores, labels = run_wbf(predictions, image_index=i)
         boxes = boxes.astype(np.int32).clip(min=0, max=INPUT_SIZE)
-        boxes = boxes*1024/INPUT_SIZE
+        boxes = boxes*512/INPUT_SIZE
         image_id = image_ids[i].split('/')[-1]
         
         for box, lb, score in zip(boxes, labels, scores):
@@ -602,7 +611,7 @@ for images, image_ids in data_loader:
                 preds[cls-1]['boxes'].append(box)
                 preds[cls-1]['scores'].append(score)
 
-            lb_path = f'data/labels/{image_id[:-4]}.txt'
+            lb_path = f'../labels1/{image_id[:-4]}.txt'
             gt_boxes_all = getBoxes_yolo(lb_path)
             precision = 0
             recall = 0

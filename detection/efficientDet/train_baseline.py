@@ -21,21 +21,28 @@ from torch.utils.data import Dataset,DataLoader
 from torch.utils.data.sampler import SequentialSampler, RandomSampler
 from glob import glob
 # from apex import amp
-# from mmcv.runner.checkpoint import load_state_dict
+import argparse
 from effdet import get_efficientdet_config, EfficientDet, DetBenchTrain
 from effdet.efficientdet import HeadNet
+parser = argparse.ArgumentParser(description="")
+
+parser.add_argument("-F", "--fold", default=0, help="config filename")
+# parser.add_argument("-M", "--mode", default='train', help="mode type")
+# parser.add_argument("-S", "--stage", default=0, help="stage")
+
+parser_args, _ = parser.parse_known_args(sys.argv)
 
 class TrainGlobalConfig:
-    SEED = 42
+    SEED = 42 + int(parser_args.fold)
     num_workers = 4
     batch_size = 4
-    n_epochs = 100
+    n_epochs = 80
     lr = 0.0002
     image_size = 512
-    fold_number = 0
+    fold_number = int(parser_args.fold)
 
-    folder = 'weights/effdet6-v1-fold'+str(fold_number)
-    TRAIN_ROOT_PATH = 'data/train'
+    folder = 'weights/effdet4_fold'+str(fold_number)
+    # TRAIN_ROOT_PATH = 'data/train'
 
     verbose = True
     verbose_step = 1
@@ -46,8 +53,8 @@ class TrainGlobalConfig:
     SchedulerClass = torch.optim.lr_scheduler.ReduceLROnPlateau
     scheduler_params = dict(
         mode='min',
-        factor=0.5,
-        patience=5,
+        factor=0.3,
+        patience=3,
         verbose=False, 
         threshold=0.0001,
         threshold_mode='abs',
@@ -124,17 +131,6 @@ def get_data(datatxt):
     list_image_path = [x.strip().split(' ')[0] for x in lines]
     list_label_path = [x.strip().split(' ')[1] for x in lines]
     return list_image_path, list_label_path
-
-def get_train_data(datatxt='../data/alltrain.txt', fold=0):
-    image_list_all, label_list_all = get_data(datatxt)
-
-    image_list = [x for x in image_list_all if x.split('/')[-1].split('.')[0] in train_id]
-    label_list = [x for x in label_list_all if x.split('/')[-1].split('.')[0] in train_id]
-
-    val_image_list = [x for x in image_list_all if x.split('/')[-1].split('.')[0] in val_id]
-    val_label_list = [x for x in label_list_all if x.split('/')[-1].split('.')[0] in val_id]
-
-    return image_list, val_image_list, label_list, val_label_list
 
 def getBoxes_yolo(label_path, im_w=512, im_h=512):
     with open(label_path) as f:
@@ -364,7 +360,7 @@ class Fitter:
             summary_loss = self.train_one_epoch(train_loader)
 
             self.log(f'[RESULT]: Train. Epoch: {self.epoch}, summary_loss: {summary_loss.avg:.5f}, time: {(time.time() - t):.5f}')
-            self.save(f'{self.base_dir}/last-checkpoint.bin')
+            self.save(f'{self.base_dir}/last_checkpoint.bin')
 
             t = time.time()
             summary_loss = self.validation(validation_loader)
@@ -373,8 +369,8 @@ class Fitter:
             if summary_loss.avg < self.best_summary_loss:
                 self.best_summary_loss = summary_loss.avg
                 self.model.eval()
-                self.save(f'{self.base_dir}/best-checkpoint-{str(self.epoch).zfill(3)}epoch.bin')
-                for path in sorted(glob(f'{self.base_dir}/best-checkpoint-*epoch.bin'))[:-3]:
+                self.save(f'{self.base_dir}/best_checkpoint_{str(self.epoch).zfill(3)}epoch.bin')
+                for path in sorted(glob(f'{self.base_dir}/best_checkpoint_*epoch.bin'))[:-3]:
                     os.remove(path)
 
             if self.config.validation_scheduler:
@@ -554,13 +550,13 @@ def intersect_dicts(da, db, exclude=()):
     return {k: v for k, v in da.items() if k in db and not any(x in k for x in exclude) and v.shape == db[k].shape}
 
 def get_net():
-    config = get_efficientdet_config('tf_efficientdet_d1')
+    config = get_efficientdet_config('tf_efficientdet_d4')
     net = EfficientDet(config, pretrained_backbone=False)
     config.num_classes = 1
     config.image_size = opt.image_size
     net.class_net = HeadNet(config, num_outputs=config.num_classes, norm_kwargs=dict(eps=.001, momentum=.01))
 
-    weight_file = 'pretrained/efficientdet_d1-4c7ebaf2.pth'
+    weight_file = 'pretrained/efficientdet_d4-5b370b7a.pth'
     checkpoint = torch.load(weight_file)
     # checkpoint = torch.load('pretrained/efficientdet_d0-d92fd44f.pth')
     # load_state_dict(net, checkpoint)

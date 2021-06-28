@@ -299,7 +299,7 @@ def map_calc(det_data, gt_data):
 
     return mAP, ap_list
 
-def val_map(gt_scores, pred_scores):
+def val_map(gt_scores, pred_scores, out_size=4):
     det_data = {}
     gt_data = {}
     for cc, (gt_score, pred_score) in enumerate(zip(gt_scores, pred_scores)):
@@ -307,7 +307,7 @@ def val_map(gt_scores, pred_scores):
             gt_data[cc] = []
         if cc not in det_data.keys():
             det_data[cc] = []
-        for i in range(4):
+        for i in range(out_size):
             if gt_score[i] >0.8:
                 bbox = "0 0 1 1"
                 gt_data[cc].append({"class_name":str(i), "bbox":bbox, "used":False})

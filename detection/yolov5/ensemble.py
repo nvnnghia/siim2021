@@ -13,8 +13,22 @@ def parse_yolov5(filename):
     for idx,line in enumerate(lines):
         img_name, cls, x1, y1, x2, y2, score = line.strip().split(' ')
         x1, y1, x2, y2 = list(map(float, [x1, y1, x2, y2]))
+
+        # if (x2-x1)*(y2-y1) < 10:
+        #     continue
+
         if img_name not in dets.keys():
             dets[img_name] = {'boxes': [], 'scores': [], 'cls': []}
+
+        # if float(cls) ==1:
+        # if 'efficientDet' in filename:
+        #     score = float(score)*1.5
+
+        #     if score< 0.1:
+        #         continue
+
+        # if 'best' in filename and float(cls) ==1:
+        #     continue
         # dets[img_name]['boxes'].append([int(x1), int(y1), int(x2), int(y2)])
         dets[img_name]['boxes'].append([float(x1), float(y1), float(x2), float(y2)])
         dets[img_name]['scores'].append(float(score))
@@ -286,8 +300,8 @@ if __name__ == '__main__':
     is_wbf2 = False
 
     if not is_wbf2:
-        # yolov5_files = glob('outputs/test_txt_005/*.txt')
-        yolov5_files = glob('outputs/val_txt/*.txt')
+        yolov5_files = glob('outputs/test_txt_005/*.txt')
+        # yolov5_files = glob('outputs/val_txt/*.txt')
 
     else:
         yolov5_files = glob('yolov5/test_txt_005_wbf2/*best*.txt')
@@ -299,6 +313,28 @@ if __name__ == '__main__':
 
         # yolov5_files = yolov5_files + mm_files + d6_files
 
+    # eff_files = [
+    #     '../efficientDet/outputs/val_txt/weights_effdet6_v1_fold0_best_checkpoint_076epoch.txt',
+    #     '../efficientDet/outputs/val_txt/weights_effdet6_fold1_best_checkpoint_068epoch.txt',
+    #     '../efficientDet/outputs/val_txt/weights_effdet6_fold2_best_checkpoint_056epoch.txt',
+    #     '../efficientDet/outputs/val_txt/weights_effdet6_fold3_best_checkpoint_054epoch.txt',
+    #     '../efficientDet/outputs/val_txt/weights_effdet6_fold4_best_checkpoint_055epoch.txt',
+    # ]
+
+    # eff_files = [
+    #     '../efficientDet/outputs/test_txt/weights_effdet6_fold0_best_checkpoint_076epoch.txt',
+    #     '../efficientDet/outputs/test_txt/weights_effdet6_fold1_best_checkpoint_068epoch.txt',
+    #     '../efficientDet/outputs/test_txt/weights_effdet6_fold2_best_checkpoint_056epoch.txt',
+    #     '../efficientDet/outputs/test_txt/weights_effdet6_fold3_best_checkpoint_054epoch.txt',
+    #     '../efficientDet/outputs/test_txt/weights_effdet6_fold4_best_checkpoint_055epoch.txt',
+    # ]
+
+
+
+    # yolov5_files += eff_files
+
+    # yolov5_files.append('../efficientDet/outputs/val_txt/weights_effdet6_v1_fold0_best_checkpoint_076epoch.txt')
+
     print(len(yolov5_files))
 
     det_data = []
@@ -308,20 +344,23 @@ if __name__ == '__main__':
         det_data.append(yolov5_dets)
         weights.append(1)
 
-    image_list = glob('../../data/png512/train/*.png')
-    # image_list = glob('../../data/png512/test/*.png')
+    # image_list = glob('../../data/png512/train/*.png')
+    image_list = glob('../../data/png512/test/*.png')
 
     # image_list1 = glob('data/test/*')
     # image_list = [x for x in image_list1 if f'../{x}' not in image_list]
     # print(len(image_list))
-
-    num_classes = 14
 
     ofile = open(f'test_v5neg_{2*is_wbf2}.txt', 'w')
 
     count=0
     for img_path in image_list:
         # image = cv2.imread(img_path) 
+
+        # mask = cv2.imread(f"../../segmentation/draw/train/{img_path.split('/')[-1]}") 
+        # mask[mask<50] = 0
+        # mask[mask>0] = 1
+
         im_h, im_w = 512,512
 
         list_boxes = []
@@ -362,6 +401,10 @@ if __name__ == '__main__':
         if len(enscores)>0:
             boxes, scores, classes = run_wbf(enboxes, enscores, enlabels, im_w, im_h, weights=enweights, iou_thr=0.55, skip_box_thr=0.001)
             for box, score, cls in zip(boxes, scores, classes):
+                # x1, y1, x2, y2 = list(map(int, box[:4]))
+                # over_ratio = np.sum(mask[y1:y2, x1:x2])/((x2-x1)*(y2-y1))
+                # if over_ratio<0.5:
+                #     score = score*over_ratio
                 ofile.write(f'{img_path.split("/")[-1]} {cls:.1f} {box[0]} {box[1]} {box[2]} {box[3]} {score}\n')
 
         count+=1
