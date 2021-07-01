@@ -165,3 +165,19 @@ eca_nfnet_l1 | oof | 3 | 0.620 | 0.846 | 2_1 | 512 | all | n_cf16 (5cls)
 eca_nfnet_l1 | oof | 0 | 0.586 | 0.824 | 2_1 | 384 | all | n_cf16_lbsm (5cls)
 eca_nfnet_l1 | oof | 1 | 0.610 | 0.838 | 2_1 | 384 | all | n_cf16_lbsm (5cls)
 eca_nfnet_l1 | oof | 2 | 0.623 | 0.847 | 2_1 | 384 | all | n_cf16_lbsm (5cls)
+
+* Multiple stage training with BDI pretrained
+Model | FOLD | stage | mAP | AUC | model type | input size | config
+--- | --- | --- | --- |--- |--- |--- |--- 
+tf_efficientnet_b7 | oof | 0 | 0.569 | 0.814 | 5_1 | 512 | n_cf20
+tf_efficientnet_b7 | oof | 1 | 0.590 | 0.827 | 5_1 | 512 | n_cf20
+tf_efficientnet_b7 | oof | 2 | 0.601 | --- | 5_1 | 512 | n_cf20
+tf_efficientnet_b7 | oof | 3 | 0.604 | --- | 5_1 | 512 | n_cf20
+
+* Multiple stage training with NIH + BDI pretrained (2 stages pretraining: NIH --> BDI)
+Model | FOLD | stage | mAP | AUC | model type | input size | config
+--- | --- | --- | --- |--- |--- |--- |--- 
+eca_nfnet_l1 | oof | 0 | 0.572 | --- | 6_1 | 512 | n_cf21
+eca_nfnet_l1 | oof | 1 | 0.593 | 0.831 | 6_1 | 512 | n_cf21
+eca_nfnet_l1 | oof | 2 | 0.612 | 0.841 | 6_1 | 512 | n_cf21
+eca_nfnet_l1 | oof | 3 | 0.614 | 0.844 | 6_1 | 512 | n_cf21
