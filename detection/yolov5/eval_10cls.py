@@ -569,17 +569,17 @@ if __name__ =="__main__":
 
 
 
-            '../yolov5_heatmap/runs/cf1_cls1_f1/exp/weights/best.pt',
-            '../yolov5_heatmap/runs/cf1_cls1_f2/exp/weights/best.pt',
-            '../yolov5_heatmap/runs/cf1_cls1_f3/exp/weights/best.pt',
-            '../yolov5_heatmap/runs/cf1_cls1_f4/exp/weights/best.pt',
-            '../yolov5_heatmap/runs/cf1_cls1_f0/exp/weights/best.pt',
+            # '../yolov5_heatmap/runs/cf1_cls1_f1/exp/weights/best.pt',
+            # '../yolov5_heatmap/runs/cf1_cls1_f2/exp/weights/best.pt',
+            # '../yolov5_heatmap/runs/cf1_cls1_f3/exp/weights/best.pt',
+            # '../yolov5_heatmap/runs/cf1_cls1_f4/exp/weights/best.pt',
+            # '../yolov5_heatmap/runs/cf1_cls1_f0/exp/weights/best.pt',
 
-            '../yolov5_heatmap/runs/cf1_cls1_f1/exp/weights/last.pt',
-            '../yolov5_heatmap/runs/cf1_cls1_f2/exp/weights/last.pt',
-            '../yolov5_heatmap/runs/cf1_cls1_f3/exp/weights/last.pt',
-            '../yolov5_heatmap/runs/cf1_cls1_f4/exp/weights/last.pt',
-            '../yolov5_heatmap/runs/cf1_cls1_f0/exp/weights/last.pt',
+            # '../yolov5_heatmap/runs/cf1_cls1_f1/exp/weights/last.pt',
+            # '../yolov5_heatmap/runs/cf1_cls1_f2/exp/weights/last.pt',
+            # '../yolov5_heatmap/runs/cf1_cls1_f3/exp/weights/last.pt',
+            # '../yolov5_heatmap/runs/cf1_cls1_f4/exp/weights/last.pt',
+            # '../yolov5_heatmap/runs/cf1_cls1_f0/exp/weights/last.pt',
             
 
             # '../yolov5_heatmap/runs/cf1_cls1_m_f0/exp2/weights/best.pt',
@@ -587,6 +587,14 @@ if __name__ =="__main__":
             # '../yolov5_heatmap/runs/cf1_cls1_m_f2/exp/weights/best.pt',
             # '../yolov5_heatmap/runs/cf1_cls1_m_f3/exp/weights/best.pt',
             # '../yolov5_heatmap/runs/cf1_cls1_m_f4/exp/weights/best.pt',
+
+            # '../yolov5_heatmap/runs/cf1_cls1_x_f0/exp/weights/best.pt',
+            # '../yolov5_heatmap/runs/cf1_cls1_x_f1/exp/weights/best.pt',
+            # '../yolov5_heatmap/runs/cf1_cls1_x_f2/exp/weights/best.pt',
+
+            '../yolov5_heatmap/runs/cf1_cls1_x_f0/exp/weights/last.pt',
+            '../yolov5_heatmap/runs/cf1_cls1_x_f1/exp/weights/last.pt',
+            '../yolov5_heatmap/runs/cf1_cls1_x_f2/exp/weights/last.pt',
 
             ]
 

@@ -13,7 +13,7 @@ cfg = {
     "use_seg":False,
     "out_dir": f"{outputdir}",
     "folds": [0, 1, 2, 3, 4],
-    "augmentation": "s_0220/0220_hf_cut_sm2_0.75_384_v1.yaml",
+    "augmentation": "s_0220/0220_hf_cut_sm2_0.75_384_v1a.yaml",
     # "weight_file": None,  # "/model_state_45000.pth",
     "weight_file": "outputs/n_cf2_pretraining/eca_nfnet_l0/", #best_map_fold0_st0.pth",
     "resume_training": False,

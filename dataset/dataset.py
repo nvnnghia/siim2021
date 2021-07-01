@@ -6,6 +6,8 @@ import torch
 import math 
 import os 
 from torch.utils.data import Sampler
+import random 
+import pandas as pd 
 
 def gaussian_radius_wh(det_size, alpha):
     height, width = det_size
@@ -80,7 +82,7 @@ def do_histogram_norm(image, mag=[[2,4],[6,12]]):
     return image
 
 class SIIMDataset(Dataset):
-    def __init__(self, df, tfms=None, cfg=None, mode='train'):
+    def __init__(self, df, tfms=None, cfg=None, mode='train', gen_images = False):
 
         self.df = df.reset_index(drop=True)
         self.mode = mode
@@ -102,6 +104,11 @@ class SIIMDataset(Dataset):
             Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
 
+        self.gen_images = gen_images
+        if gen_images:
+            self.c14_df = pd.read_csv('data/c14/Data_Entry_2017.csv')
+            self.c14_names = self.c14_df['Image Index'].values
+
     def __len__(self):
         return len(self.df)
 
@@ -122,6 +129,10 @@ class SIIMDataset(Dataset):
 
         if self.mode in ['predict', 'edata']:
             img = cv2.resize(img, (512, 512))
+
+        if self.gen_images:
+            if random.randint(0,2) == 1:
+                img = self.generate_images(img, row)
 
         if self.cfg.use_lung_seg:
             if self.mode in ['edata']:
@@ -192,10 +203,74 @@ class SIIMDataset(Dataset):
             if self.cfg.stage>0:
                 oof_label = torch.tensor(self.oof_labels[index])
 
+            if self.cfg.label_smmoth and self.mode in ['train']:
+                label = self.make_label_smooth(label, num_classes=self.cfg.output_size)
+                # print('test=========')
+
             if self.cfg.use_seg:
                 return img, label, oof_label, torch.tensor(self.labels[index]-1), torch.from_numpy(hm)
             return img, label, oof_label, torch.tensor(self.labels[index]-1)
 
+    def make_label_smooth(self, labels, num_classes, epsilon=0.1):
+        b = np.ones(num_classes) * (1 / num_classes)
+        return (1 - epsilon) * labels + epsilon * b 
+
+    def generate_images(self, img, row):
+        selected_index = random.randint(0, len(self.c14_names)-1)
+        for i in range(1,13):
+            path = f"data/c14/images_{i:03d}/images/{self.c14_names[selected_index]}"
+            if os.path.isfile(path):
+                break
+
+        image = cv2.imread(path)
+        image = cv2.resize(image, (512, 512))
+
+        a = row.label 
+        a = np.array(a.split(' ')).reshape(-1,6)
+        dim_h = row.dim0 #heigh
+        dim_w = row.dim1 #width
+        im_h, im_w = img.shape[:2]
+        boxes = []
+        for b in a:
+            if b[0]=='opacity':
+                conf, x1, y1, x2, y2 = list(map(float, b[1:]))
+                # print(conf, x1, y1, x2, y2)
+                x1 = x1*im_w/dim_w
+                x2 = x2*im_w/dim_w
+                y1 = y1*im_h/dim_h
+                y2 = y2*im_h/dim_h
+
+                x1, y1, x2, y2 = list(map(int, [x1, y1, x2, y2]))
+                roi = img[y1:y2, x1:x2]
+
+                image = addRoi(roi, image, y1, x1)
+                boxes.append([x1, y1, x2, y2, conf])
+        if len(boxes)>0:
+            return image
+        else:
+            return img
+
+def addRoi(roi, bg, bbox_top, bbox_left):
+    roi_h, roi_w = roi.shape[:2]
+    im_h, im_w = bg.shape[:2]
+    center = (int(roi_w / 2),int(roi_h / 2))
+
+    # mask = 255 * np.ones(roi.shape, roi.dtype)
+
+    mask= ((np.exp(-(((np.arange(roi_w)-center[0])/(roi_w/2))**2)/2)).reshape(1,-1)
+                                *(np.exp(-(((np.arange(roi_h)-center[1])/(roi_h/2))**2)/2)).reshape(-1,1))
+
+    mask[mask>0.6]= 1
+    # mask[mask<0.5]= 0.5
+
+    mask *=255
+    mask = mask.astype(np.uint8)
+
+    # cv2.imwrite('mask.png', mask)
+
+    bg[bbox_top:bbox_top+roi_h, bbox_left:bbox_left+roi_w] = cv2.seamlessClone(roi, bg[bbox_top:bbox_top+roi_h, bbox_left:bbox_left+roi_w], mask, center, cv2.NORMAL_CLONE)
+
+    return bg 
 
 class C14Dataset(Dataset):
     def __init__(self, df, tfms=None, cfg=None, mode='train'):

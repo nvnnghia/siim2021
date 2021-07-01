@@ -3,30 +3,8 @@ from utils.evaluate import val
 import numpy as np 
 
 oof_list = [
-	# 'outputs/n_cf3/oofs4.csv',
-	# 'outputs/n_cf4/oofs4.csv',
-	# 'outputs/n_cf4/oofs4.csv',
-	# 'outputs/n_cf4/oofs5.csv',
-	# 'outputs/n_cf5/oofs3.csv',
-	# 'outputs/n_cf5/oofs2.csv',
-	# 'outputs/n_cf2/oofs4.csv',
-	# 'outputs/n_cf2/oofs3.csv',
-	# 'outputs/n_cf1/oofs4.csv',
-	# 'outputs/n_cf1/oofs3.csv',
-	# 'outputs/n_cf8/oofs2.csv',
-	# 'outputs/n_cf8/oofs3.csv', #606
-	# 'outputs/n_cf8/oofs4.csv', #603
-	# 'outputs/n_cf7/histogram_norm/oofs3.csv',
-	# 'outputs/n_cf9/oofs2.csv',
 	# 'outputs/n_cf2_debug/oofs2.csv',
 	# 'outputs/n_cf2_debug/oofs3.csv',
-
-	# 'outputs/n_cf10/oofs2.csv', #0.602
-	# 'outputs/n_cf10/oofs3.csv', #0.602
-
-	# 'outputs/n_cf7_5cls/oofs2.csv',
-	# 'outputs/n_cf7_5cls/oofs3.csv',
-	# 'outputs/n_cf7_5cls/oofs4.csv',
 
 	# 'outputs/n_cf11/oofs2.csv', #611
 	# 'outputs/n_cf11/oofs3.csv', #608
@@ -50,8 +28,15 @@ oof_list = [
 	# 'outputs/n_cf11/oofs3.csv', #608
 
 	# 'outputs/n_cf16/oofs2.csv', #617
-	'outputs/n_cf16/oofs3.csv', #619
+	# 'outputs/n_cf16/oofs3.csv', #619
 	# 'outputs/n_cf16/oofs4.csv', #617
+
+	# 'outputs/n_cf16_512/oofs3.csv', #620
+
+	'outputs/n_cf16_lbsm/oofs3.csv', #622
+	# 'outputs/n_cf16_lbsm/oofs2.csv', #623
+
+	'outputs/n_cf19_lbsm/oofs3.csv', #623
 ]
 
 # weights = [1, 3]
@@ -74,7 +59,20 @@ for path, w in zip(oof_list[1:], weights[1:]):
 
 df[['pred_cls1', 'pred_cls2', 'pred_cls3' ,'pred_cls4']] /= sum(weights)
 
-# true_count = [1726,3007,1181,483]
+# df['pred_cls2'] = df['pred_cls2']*(df['pred_cls5'])
+# df['pred_cls3'] = df['pred_cls3']*(df['pred_cls5'])
+# df['pred_cls4'] = df['pred_cls4']*(df['pred_cls5'])
+
+# for i in range(df.shape[0]):
+# 	cols = ['pred_cls1', 'pred_cls2', 'pred_cls3' ,'pred_cls4']
+# 	prob = df[cols].iloc[i].values 
+# 	indexs = np.argsort(prob)
+# 	df.at[i,cols[indexs[0]]]=0
+# 	df.at[i,cols[indexs[1]]]=1
+# 	df.at[i,cols[indexs[3]]]=3
+# 	df.at[i,cols[indexs[2]]]=2
+
+# true_count = [1726,3007,1181,483, 4294]
 # scale_factors = [1,1,1,1]
 # scores = df[['pred_cls1', 'pred_cls2', 'pred_cls3' ,'pred_cls4']].values
 # for i in range(4):

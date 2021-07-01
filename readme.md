@@ -161,4 +161,7 @@ eca_nfnet_l1 | oof | 0 | 0.582 | 0.822 | 2_1 | 384 | all | n_cf16 (5cls)
 eca_nfnet_l1 | oof | 1 | 0.606 | 0.835 | 2_1 | 384 | all | n_cf16 (5cls)
 eca_nfnet_l1 | oof | 2 | 0.617 | 0.842 | 2_1 | 384 | all | n_cf16 (5cls)
 eca_nfnet_l1 | oof | 3 | 0.619 | 0.843 | 2_1 | 384 | all | n_cf16 (5cls)
-
+eca_nfnet_l1 | oof | 3 | 0.620 | 0.846 | 2_1 | 512 | all | n_cf16 (5cls)
+eca_nfnet_l1 | oof | 0 | 0.586 | 0.824 | 2_1 | 384 | all | n_cf16_lbsm (5cls)
+eca_nfnet_l1 | oof | 1 | 0.610 | 0.838 | 2_1 | 384 | all | n_cf16_lbsm (5cls)
+eca_nfnet_l1 | oof | 2 | 0.623 | 0.847 | 2_1 | 384 | all | n_cf16_lbsm (5cls)

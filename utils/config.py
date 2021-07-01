@@ -42,7 +42,11 @@ if "use_edata" not in cfg.keys():
     cfg["use_edata"] = 0
 if "use_lung_seg" not in cfg.keys():
     cfg["use_lung_seg"] = 0
-    
+if "label_smmoth" not in cfg.keys():
+    cfg["label_smmoth"] = 0
+if "gen_images" not in cfg.keys():
+    cfg["gen_images"] = 0
+     
 cfg["mode"] = parser_args.mode
 cfg["seed"] += int(parser_args.stage)
 cfg["stage"] = int(parser_args.stage)

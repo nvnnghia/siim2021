@@ -5,6 +5,8 @@ import cv2
 import os 
 from glob import glob 
 import warnings
+from warnings import filterwarnings
+filterwarnings("ignore")
 
 def parse_yolov5(filename):
     with open(filename) as f:
@@ -300,8 +302,8 @@ if __name__ == '__main__':
     is_wbf2 = False
 
     if not is_wbf2:
-        yolov5_files = glob('outputs/test_txt_005/*.txt')
-        # yolov5_files = glob('outputs/val_txt/*.txt')
+        # yolov5_files = glob('outputs/test_txt_005/*.txt')
+        yolov5_files = glob('outputs/val_txt/*.txt')
 
     else:
         yolov5_files = glob('yolov5/test_txt_005_wbf2/*best*.txt')
@@ -313,12 +315,19 @@ if __name__ == '__main__':
 
         # yolov5_files = yolov5_files + mm_files + d6_files
 
+    eff_files = glob('../efficientDet/outputs/val_txt/*.txt')
     # eff_files = [
     #     '../efficientDet/outputs/val_txt/weights_effdet6_v1_fold0_best_checkpoint_076epoch.txt',
     #     '../efficientDet/outputs/val_txt/weights_effdet6_fold1_best_checkpoint_068epoch.txt',
     #     '../efficientDet/outputs/val_txt/weights_effdet6_fold2_best_checkpoint_056epoch.txt',
     #     '../efficientDet/outputs/val_txt/weights_effdet6_fold3_best_checkpoint_054epoch.txt',
     #     '../efficientDet/outputs/val_txt/weights_effdet6_fold4_best_checkpoint_055epoch.txt',
+
+    #     '../efficientDet/outputs/val_txt/weights_effdet4_fold0_best_checkpoint_035epoch.txt',
+    #     '../efficientDet/outputs/val_txt/weights_effdet4_fold1_best_checkpoint_070epoch.txt',
+    #     '../efficientDet/outputs/val_txt/weights_effdet4_fold2_best_checkpoint_049epoch.txt',
+    #     '../efficientDet/outputs/val_txt/weights_effdet4_fold3_best_checkpoint_042epoch.txt',
+    #     # '../efficientDet/outputs/val_txt/weights_effdet4_fold3_best_checkpoint_042epoch.txt',
     # ]
 
     # eff_files = [
@@ -331,7 +340,7 @@ if __name__ == '__main__':
 
 
 
-    # yolov5_files += eff_files
+    yolov5_files += eff_files
 
     # yolov5_files.append('../efficientDet/outputs/val_txt/weights_effdet6_v1_fold0_best_checkpoint_076epoch.txt')
 
@@ -344,8 +353,8 @@ if __name__ == '__main__':
         det_data.append(yolov5_dets)
         weights.append(1)
 
-    # image_list = glob('../../data/png512/train/*.png')
-    image_list = glob('../../data/png512/test/*.png')
+    image_list = glob('../../data/png512/train/*.png')
+    # image_list = glob('../../data/png512/test/*.png')
 
     # image_list1 = glob('data/test/*')
     # image_list = [x for x in image_list1 if f'../{x}' not in image_list]

@@ -541,8 +541,8 @@ def getBoxes_yolo(label_path, im_w=512, im_h=512):
         gt_boxes[cls].append([xmin, ymin, xmax, ymax])
     return gt_boxes
 
-model_name = 'tf_efficientdet_d1'
-weight_path = 'weights/effdet6_fold0/best_checkpoint_076epoch.bin'
+model_name = 'tf_efficientdet_d4'
+weight_path = 'weights/effdet4_fold4/best_checkpoint_037epoch.bin'
 net = load_net(weight_path, model_name)
 device = torch.device("cuda")
 
@@ -550,7 +550,7 @@ num_classes = 1
 fold=4
 f_thres= 0.3
 is_eval = True
-is_eval = False
+# is_eval = False
 if is_eval:
     # train_list_path, valid_list_path, train_label_path, valid_label_path = get_train_data(datatxt='data/alltrain.txt', fold=fold)
     valid_list_path, valid_label_path = get_data(datatxt=f'../data/val_f{fold}_s42_cls1.txt')

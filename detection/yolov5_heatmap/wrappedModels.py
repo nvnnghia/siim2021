@@ -139,7 +139,7 @@ class V5Centernet(nn.Module):
         if type == 'x':
             channel_list = [1280, 640, 320, 160, 80]
         elif type ==  'l':
-            pass
+            channel_list = [1024, 512, 256, 128, 64]
         elif type == 'm':
             channel_list = [768, 384, 192, 96, 48]
         elif type == 's':

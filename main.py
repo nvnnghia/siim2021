@@ -26,6 +26,7 @@ from torch.utils.data import Sampler,RandomSampler,SequentialSampler
 from utils.parallel import DataParallelModel, DataParallelCriterion
 import time 
 import neptune
+from ranger21 import Ranger21
 from shutil import copyfile
 from tqdm import tqdm
 from warnings import filterwarnings
@@ -46,7 +47,7 @@ def set_seed(seed=1234):
 
 
 def sigmoid_rampup(current, rampup_length=15):
-    """Exponential rampup from https://arxiv.org/abs/1610.02242"""
+    """Exponential rampup from https://arxiv.org/abs/1610.02242""" 
     if rampup_length == 0:
         return 1.0
     else:
@@ -89,6 +90,8 @@ def get_optimizer(cfg, model):
         optimizer = torch.optim.Adam(params, lr=params[0]["lr"])
     elif cfg["optimizer"] == "SGD":
         optimizer = torch.optim.SGD(params, lr=params[0]["lr"], momentum=0.9, nesterov=True,)
+    elif cfg["optimizer"] == "ranger21":
+        optimizer = Ranger21(params, lr=params[0]["lr"])
 
     return optimizer
 
@@ -180,7 +183,7 @@ def get_dataloader(cfg, fold_id):
         train_df = train_df.head(100)
         val_df = val_df.head(100)
 
-    train_dataset = SIIMDataset(train_df, tfms=transforms_train, cfg=cfg)
+    train_dataset = SIIMDataset(train_df, tfms=transforms_train, cfg=cfg, gen_images = cfg.gen_images)
     if cfg.muliscale:
         train_loader = DataLoader(dataset=train_dataset,
                         batch_sampler= BatchSampler(RandomSampler(train_dataset),
@@ -352,7 +355,7 @@ def valid_func(model, valid_loader):
 
             sz = images.size()[0]
 
-            flip = 0 
+            flip = 1 
             if flip:
                 images = torch.stack([images,images.flip(-1)],0) # hflip
                 images = images.view(-1, 3, images.shape[-1], images.shape[-1])
@@ -437,6 +440,8 @@ def valid_func(model, valid_loader):
     acc = np.mean(acc[:4])
 
     map, ap_list = val_map(origin_labels, pred_probs, cfg.output_size)
+    if cfg.output_size ==5:
+        map = np.mean(ap_list[:4])
 
     if cfg.neptune_project and cfg.mode == 'train':
         neptune.log_metric('VAL loss', loss_valid)
@@ -463,7 +468,7 @@ def test_func(model, valid_loader):
 
             sz = images.size()[0]
 
-            flip = 0 
+            flip = 1 
             if flip:
                 images = torch.stack([images,images.flip(-1)],0) # hflip
                 images = images.view(-1, 3, images.shape[-1], images.shape[-1])
@@ -649,8 +654,8 @@ if __name__ == "__main__":
         # elif cfg.mode == 'val':
         if cfg.mode in['train', 'val']:
             model = get_model(cfg).to(device)
-            # chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth'
-            chpt_path = f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth'
+            chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth'
+            # chpt_path = f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth'
             # chpt_path = f'{cfg.out_dir}/best_loss_fold{fold_id}_st{cfg.stage}.pth'
             checkpoint = torch.load(chpt_path, map_location="cpu")
             if cfg.use_seg:
@@ -722,8 +727,8 @@ if __name__ == "__main__":
 
         elif cfg.mode in ['test', 'predict']:
             model = get_model(cfg).to(device)
-            # chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth'
-            chpt_path = f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth'
+            chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth'
+            # chpt_path = f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth'
             # chpt_path = f'{cfg.out_dir}/best_loss_fold{fold_id}_st{cfg.stage}.pth'
             checkpoint = torch.load(chpt_path, map_location="cpu")
             if cfg.use_seg:
