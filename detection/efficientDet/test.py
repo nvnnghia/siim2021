@@ -23,7 +23,7 @@ import warnings
 from warnings import filterwarnings
 filterwarnings("ignore")
 
-INPUT_SIZE= 512 
+INPUT_SIZE= 384 
 
 
 def get_valid_transforms():
@@ -541,140 +541,163 @@ def getBoxes_yolo(label_path, im_w=512, im_h=512):
         gt_boxes[cls].append([xmin, ymin, xmax, ymax])
     return gt_boxes
 
-model_name = 'tf_efficientdet_d4'
-weight_path = 'weights/effdet4_fold4/best_checkpoint_037epoch.bin'
-net = load_net(weight_path, model_name)
-device = torch.device("cuda")
+import argparse
+parser = argparse.ArgumentParser(description="")
+parser.add_argument("-D", "--test_path",  default='../../data/png512/test/*.png', help="test image location")
+parser.add_argument("-G", "--out_path", default='outputs/test_txt/', help="output location")
+parser.add_argument("-W", "--weight_path", default='outputs/test_txt/', help="weight location")
 
-num_classes = 1
-fold=4
-f_thres= 0.3
-is_eval = True
-# is_eval = False
-if is_eval:
-    # train_list_path, valid_list_path, train_label_path, valid_label_path = get_train_data(datatxt='data/alltrain.txt', fold=fold)
-    valid_list_path, valid_label_path = get_data(datatxt=f'../data/val_f{fold}_s42_cls1.txt')
-    outpath = 'outputs/val_txt/' + weight_path.replace('/','_').replace('.bin', '.txt').replace('-', '_')
-else:
-    # valid_list_path, valid_label_path = get_data('data/test_pos_005.txt')
-    valid_list_path = glob('../../data/png512/test/*.png')
-    outpath = 'outputs/test_txt/' + weight_path.replace('/','_').replace('.bin', '.txt').replace('-', '_')
-    
-dataset = DatasetRetriever(
-    image_path=valid_list_path,
-    transforms=get_valid_transforms(),
-)
+parser_args, _ = parser.parse_known_args(sys.argv)
 
-data_loader = DataLoader(
-    dataset,
-    batch_size=16,
-    shuffle=False,
-    num_workers=4,
-    drop_last=False,
-    collate_fn=collate_fn
-)
+weight_paths = parser_args.weight_path 
+weight_paths = glob(f'{weight_paths}/*bin')
 
+for weight_path in weight_paths:
+    if 'd4' in weight_path:
+        model_name = 'tf_efficientdet_d4'
+    elif 'd1' in weight_path:
+        model_name = 'tf_efficientdet_d1'
+    else:
+        model_name = 'tf_efficientdet_d1'
+    # weight_path = 'weights/effdet4_fold4/best_checkpoint_037epoch.bin'
 
-iou_thresholds_05 = [0.5]
-area_list = [(0,800),(800,1500),(1500,3000),(3000,8000),(8000,1e16)]
-results = {}
-for i in range(num_classes):
-    results[i] = {'tp':0, 'fp':0, 'fn':0}
-total_size_results = {0: {'tp':0, 'fp':0, 'fn':0}, 1: {'tp':0, 'fp':0, 'fn':0},2: {'tp':0, 'fp':0, 'fn':0},3: {'tp':0, 'fp':0, 'fn':0},4: {'tp':0, 'fp':0, 'fn':0}}
+    # print(weight_path)
 
-print(outpath)
+    net = load_net(weight_path, model_name)
+    device = torch.device("cuda")
 
-count=0
-file = open(outpath, 'w')
-for images, image_ids in data_loader:
-    predictions = make_predictions(images)
-    # predictions = make_tta_predictions(images)
-    for i, image in enumerate(images):
-        boxes, scores, labels = run_wbf(predictions, image_index=i)
-        boxes = boxes.astype(np.int32).clip(min=0, max=INPUT_SIZE)
-        boxes = boxes*512/INPUT_SIZE
-        image_id = image_ids[i].split('/')[-1]
+    num_classes = 1
+    fold=4
+    f_thres= 0.3
+    # is_eval = True
+    is_eval = False
+    if is_eval:
+        # train_list_path, valid_list_path, train_label_path, valid_label_path = get_train_data(datatxt='data/alltrain.txt', fold=fold)
+        valid_list_path, valid_label_path = get_data(datatxt=f'../data/val_f{fold}_s42_cls1.txt')
+        outpath = 'outputs/val_txt/' + weight_path.replace('/','_').replace('.bin', '.txt').replace('-', '_')
+    else:
+        # valid_list_path, valid_label_path = get_data('data/test_pos_005.txt')
+        valid_list_path = glob(parser_args.test_path)
+        outpath = parser_args.out_path + weight_path.replace('/','_').replace('.bin', '.txt').replace('-', '_')
         
-        for box, lb, score in zip(boxes, labels, scores):
-            x1, y1, x2, y2 = box 
-            file.write(f'{image_id} {lb-1} {x1} {y1} {x2} {y2} {score}\n')
+    dataset = DatasetRetriever(
+        image_path=valid_list_path,
+        transforms=get_valid_transforms(),
+    )
 
-        if is_eval:
-            boxes = boxes[scores >= f_thres].astype(np.int32)
-            classes = labels[scores >=float(f_thres)]
-            scores = scores[scores >=float(f_thres)]
-
-            preds ={}
-            for cls in range(num_classes):
-                preds[cls] = {'boxes': [], 'scores': []}
-            for box, score, cls in zip(boxes, scores, classes):
-                preds[cls-1]['boxes'].append(box)
-                preds[cls-1]['scores'].append(score)
-
-            lb_path = f'../labels1/{image_id[:-4]}.txt'
-            gt_boxes_all = getBoxes_yolo(lb_path)
-            precision = 0
-            recall = 0
-            f1_score = 0
-            res = {}
-            for i in range(num_classes):
-                res[i] = {'tp':0, 'fp':0, 'fn':0, 'precision': 0, 'recall': 0, 'f1_score': 0}
-            for i in range(num_classes):
-                boxes = np.array(preds[i]['boxes'])
-                scores = np.array(preds[i]['scores'])
-                preds_sorted_idx = np.argsort(scores)[::-1]
-                preds_sorted = boxes[preds_sorted_idx]
-
-                gt_boxes = np.array(gt_boxes_all[i])
-
-                tp, fp, fn, size_results = calculate_image_precision_f1(preds_sorted,
-                                                        gt_boxes,
-                                                        thresholds=iou_thresholds_05,
-                                                        area_list=area_list,
-                                                        form='pascal_voc')
-
-                for key, value in size_results.items():
-                    total_size_results[key]['tp'] += value['tp']
-                    total_size_results[key]['fp'] += value['fp']
-                    total_size_results[key]['fn'] += value['fn']
+    data_loader = DataLoader(
+        dataset,
+        batch_size=16,
+        shuffle=False,
+        num_workers=4,
+        drop_last=False,
+        collate_fn=collate_fn
+    )
 
 
-                results[i]['tp'] += tp 
-                results[i]['fp'] += fp
-                results[i]['fn'] += fn
-
-                total_tp = results[i]['tp'] 
-                total_fp = results[i]['fp'] 
-                total_fn = results[i]['fn'] 
-
-                precision1 = total_tp / (total_tp + total_fp + 1e-6)
-                recall1 =  total_tp / (total_tp + total_fn +1e-6)
-                f1_score1 = 2*(precision1*recall1)/(precision1+recall1+1e-6)
-
-                # if i==12:
-                precision += precision1/num_classes
-                recall += recall1/num_classes
-                f1_score += f1_score1/num_classes
-                res[i]['precision'] += precision1
-                res[i]['recall'] += recall1
-                res[i]['f1_score'] += f1_score1
-                res[i]['tp'] += total_tp
-                res[i]['fp'] += total_fp
-                res[i]['fn'] += total_fn
-
-            print(count, f"F1 score: {f1_score:.4f}   precision: {precision:.4f}  recall: {recall:.4f}", end='\r')
-
-        else:
-            print(count, end='\r')
-
-        count+=1
-            # if count>20: 
-            #     break
-if is_eval:
-    print(count, f"F1 score: {f1_score:.4f}   precision: {precision:.4f}  recall: {recall:.4f}")
+    iou_thresholds_05 = [0.5]
+    area_list = [(0,800),(800,1500),(1500,3000),(3000,8000),(8000,1e16)]
+    results = {}
     for i in range(num_classes):
-        print(f"cls {i}, F1 score: {res[i]['f1_score']:.4f}   precision: {res[i]['precision']:.4f}  recall: {res[i]['recall']:.4f}, \
-            TP: {res[i]['tp']:.4f}   FP: {res[i]['fp']:.4f}  FN: {res[i]['fn']:.4f}")
+        results[i] = {'tp':0, 'fp':0, 'fn':0}
+    total_size_results = {0: {'tp':0, 'fp':0, 'fn':0}, 1: {'tp':0, 'fp':0, 'fn':0},2: {'tp':0, 'fp':0, 'fn':0},3: {'tp':0, 'fp':0, 'fn':0},4: {'tp':0, 'fp':0, 'fn':0}}
 
-file.close()
+    print(outpath)
+
+    count=0
+    file = open(outpath, 'w')
+    for images, image_ids in data_loader:
+        predictions = make_predictions(images)
+        # predictions = make_tta_predictions(images)
+        for i, image in enumerate(images):
+            boxes, scores, labels = run_wbf(predictions, image_index=i)
+            boxes = boxes.astype(np.int32).clip(min=0, max=INPUT_SIZE)
+            boxes = boxes*512/INPUT_SIZE
+            image_id = image_ids[i].split('/')[-1]
+            
+            for box, lb, score in zip(boxes, labels, scores):
+                x1, y1, x2, y2 = box 
+                file.write(f'{image_id} {lb-1} {x1} {y1} {x2} {y2} {score}\n')
+
+            if is_eval:
+                boxes = boxes[scores >= f_thres].astype(np.int32)
+                classes = labels[scores >=float(f_thres)]
+                scores = scores[scores >=float(f_thres)]
+
+                preds ={}
+                for cls in range(num_classes):
+                    preds[cls] = {'boxes': [], 'scores': []}
+                for box, score, cls in zip(boxes, scores, classes):
+                    preds[cls-1]['boxes'].append(box)
+                    preds[cls-1]['scores'].append(score)
+
+                lb_path = f'../labels1/{image_id[:-4]}.txt'
+                gt_boxes_all = getBoxes_yolo(lb_path)
+                precision = 0
+                recall = 0
+                f1_score = 0
+                res = {}
+                for i in range(num_classes):
+                    res[i] = {'tp':0, 'fp':0, 'fn':0, 'precision': 0, 'recall': 0, 'f1_score': 0}
+                for i in range(num_classes):
+                    boxes = np.array(preds[i]['boxes'])
+                    scores = np.array(preds[i]['scores'])
+                    preds_sorted_idx = np.argsort(scores)[::-1]
+                    preds_sorted = boxes[preds_sorted_idx]
+
+                    gt_boxes = np.array(gt_boxes_all[i])
+
+                    tp, fp, fn, size_results = calculate_image_precision_f1(preds_sorted,
+                                                            gt_boxes,
+                                                            thresholds=iou_thresholds_05,
+                                                            area_list=area_list,
+                                                            form='pascal_voc')
+
+                    for key, value in size_results.items():
+                        total_size_results[key]['tp'] += value['tp']
+                        total_size_results[key]['fp'] += value['fp']
+                        total_size_results[key]['fn'] += value['fn']
+
+
+                    results[i]['tp'] += tp 
+                    results[i]['fp'] += fp
+                    results[i]['fn'] += fn
+
+                    total_tp = results[i]['tp'] 
+                    total_fp = results[i]['fp'] 
+                    total_fn = results[i]['fn'] 
+
+                    precision1 = total_tp / (total_tp + total_fp + 1e-6)
+                    recall1 =  total_tp / (total_tp + total_fn +1e-6)
+                    f1_score1 = 2*(precision1*recall1)/(precision1+recall1+1e-6)
+
+                    # if i==12:
+                    precision += precision1/num_classes
+                    recall += recall1/num_classes
+                    f1_score += f1_score1/num_classes
+                    res[i]['precision'] += precision1
+                    res[i]['recall'] += recall1
+                    res[i]['f1_score'] += f1_score1
+                    res[i]['tp'] += total_tp
+                    res[i]['fp'] += total_fp
+                    res[i]['fn'] += total_fn
+
+                print(count, f"F1 score: {f1_score:.4f}   precision: {precision:.4f}  recall: {recall:.4f}", end='\r')
+
+            else:
+                print(count, end='\r')
+
+            count+=1
+                # if count>20: 
+                #     break
+    if is_eval:
+        print(count, f"F1 score: {f1_score:.4f}   precision: {precision:.4f}  recall: {recall:.4f}")
+        for i in range(num_classes):
+            print(f"cls {i}, F1 score: {res[i]['f1_score']:.4f}   precision: {res[i]['precision']:.4f}  recall: {res[i]['recall']:.4f}, \
+                TP: {res[i]['tp']:.4f}   FP: {res[i]['fp']:.4f}  FN: {res[i]['fn']:.4f}")
+
+    file.close()
+
+    del net 
+    gc.collect()
 

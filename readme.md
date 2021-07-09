@@ -165,7 +165,15 @@ eca_nfnet_l1 | oof | 3 | 0.620 | 0.846 | 2_1 | 512 | all | n_cf16 (5cls)
 eca_nfnet_l1 | oof | 0 | 0.586 | 0.824 | 2_1 | 384 | all | n_cf16_lbsm (5cls)
 eca_nfnet_l1 | oof | 1 | 0.610 | 0.838 | 2_1 | 384 | all | n_cf16_lbsm (5cls)
 eca_nfnet_l1 | oof | 2 | 0.623 | 0.847 | 2_1 | 384 | all | n_cf16_lbsm (5cls)
-
+eca_nfnet_l1 | oof | 0 | 0.581 | 0.824 | 2_1 | 384 | all | n_cf16_lbsm_1 (5cls)
+eca_nfnet_l1 | oof | 1 | 0.- | 0.- | 2_1 | 384 | all | n_cf16_lbsm_1 (5cls)
+eca_nfnet_l1 | oof | 2 | 0.- | 0.- | 2_1 | 384 | all | n_cf16_lbsm_1 (5cls)
+eca_nfnet_l2 | oof | 0 | 0.576 | 0.819 | 2_1 | 384 | all | n_cf16_lbsm_2 (5cls)
+eca_nfnet_l2 | oof | 1 | 0.- | 0.- | 2_1 | 384 | all | n_cf16_lbsm_2 (5cls)
+eca_nfnet_l2 | oof | 2 | 0.- | 0.- | 2_1 | 384 | all | n_cf16_lbsm_2 (5cls)
+eca_nfnet_l1 | oof | 0 | 0.589 | 0.827 | 2_1 | 384 | all | n_cf23 (5cls)
+eca_nfnet_l1 | oof | 1 | 0.- | 0.- | 2_1 | 384 | all | n_cf23 (5cls)
+eca_nfnet_l1 | oof | 2 | 0.- | 0.- | 2_1 | 384 | all | n_cf23 (5cls)
 * Multiple stage training with BDI pretrained
 
 Model | FOLD | stage | mAP | AUC | model type | input size | config

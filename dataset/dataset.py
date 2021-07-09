@@ -8,6 +8,7 @@ import os
 from torch.utils.data import Sampler
 import random 
 import pandas as pd 
+from glob import glob 
 
 def gaussian_radius_wh(det_size, alpha):
     height, width = det_size
@@ -95,6 +96,9 @@ class SIIMDataset(Dataset):
                 print('====', self.df.shape)
                 cols = [f'pred_cls{i+1}' for i in range(cfg.output_size)]
                 self.labels = self.df[cols].values
+            elif self.mode in ['ricord']:
+                cols = [f'gt_cls{i+1}' for i in range(cfg.output_size)]
+                self.labels = self.df[cols].values
             if cfg.stage > 0:
                 cols = [f'pred_cls{i+1}' for i in range(cfg.output_size)]
                 self.oof_labels = self.df[cols].values
@@ -123,11 +127,13 @@ class SIIMDataset(Dataset):
             path = f'{self.cfg.image_dir}/test/{row.image_id}.png'
         elif self.mode in ['predict'] or self.mode in ['edata']:
             path = f'data/{row.values[0]}'
+        elif self.mode in ['ricord']:
+            path = f'data/ricord1024/{row.values[0]}'
         else:
             path = f'{self.cfg.image_dir}/train/{row.id[:-6]}.png'
         img = cv2.imread(path)  
 
-        if self.mode in ['predict', 'edata']:
+        if self.mode in ['predict', 'edata', 'ricord']:
             img = cv2.resize(img, (512, 512))
 
         if self.gen_images:
@@ -168,8 +174,11 @@ class SIIMDataset(Dataset):
                 if self.cfg.use_seg:
                     hm = create_heatmap(im_w, im_h, boxes, type=2)
 
+        if self.mode not in ['test', 'predict'] and self.mode in ['edata'] and self.cfg.use_seg:
+            hm = np.zeros(img.shape[:2])
+
         if self.transform is not None:
-            if self.cfg.use_seg:
+            if self.cfg.use_seg and self.mode not in ['test', 'predict']:
                 res = self.transform(image=img, mask=hm)
                 hm = res["mask"]
             else:
@@ -196,6 +205,11 @@ class SIIMDataset(Dataset):
                     label[self.labels[index]-1] = 1
                     if self.cfg.output_size>4 and len(boxes)>0:
                         label[4] = 1
+
+                    # if self.cfg.output_size>4 and label[4] != (1-label[0]) and self.mode in ['train']:
+                    #     label[4] = 0.8
+                    #     label[4] = 0.8
+                    #     print('wwwww=====')
             else:
                 label = torch.tensor(self.labels[index])
 
@@ -208,6 +222,7 @@ class SIIMDataset(Dataset):
                 # print('test=========')
 
             if self.cfg.use_seg:
+                hm = cv2.resize(hm, (24,24))
                 return img, label, oof_label, torch.tensor(self.labels[index]-1), torch.from_numpy(hm)
             return img, label, oof_label, torch.tensor(self.labels[index]-1)
 
@@ -279,44 +294,79 @@ class C14Dataset(Dataset):
         self.mode = mode
         self.transform = tfms
 
-        self.labels = self.df['Finding Labels'].values
-        self.label_names = ['Cardiomegaly', 'Emphysema', 'Effusion', 'No Finding', 'Hernia', 'Infiltration', 
-        'Mass', 'Nodule', 'Atelectasis', 'Pneumothorax', 'Pleural_Thickening', 'Pneumonia', 'Fibrosis', 'Edema', 'Consolidation']
-        self.lb_map = {x:y  for y,x in enumerate(self.label_names)}
+        if self.mode  not in ['test']:
+            self.labels = self.df['Finding Labels'].values
+            self.label_names = ['Cardiomegaly', 'Emphysema', 'Effusion', 'No Finding', 'Hernia', 'Infiltration', 
+            'Mass', 'Nodule', 'Atelectasis', 'Pneumothorax', 'Pleural_Thickening', 'Pneumonia', 'Fibrosis', 'Edema', 'Consolidation']
+            self.lb_map = {x:y  for y,x in enumerate(self.label_names)}
         self.cfg = cfg
         self.tensor_tfms = Compose([
             ToTensor(),
             Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
 
+        if 'lateral' in self.cfg.out_dir:
+            self.lateral_paths = glob('data/bimcv512/*lateral*')
+            print('lateral size', len(self.lateral_paths))
+
     def __len__(self):
         return len(self.df)
 
     def __getitem__(self, index):
         row = self.df.loc[index]
-        for i in range(1,13):
-            path = f"{self.cfg.image_dir}/images_{i:03d}/images/{row['Image Index']}"
-            if os.path.isfile(path):
-                break
+        if self.mode in ['test']:
+            path = f'data/{row.values[0]}'
         else:
-            print('file does not exist!! ', path)
+            for i in range(1,13):
+                path = f"{self.cfg.image_dir}/images_{i:03d}/images/{row['Image Index']}"
+                if os.path.isfile(path):
+                    break
+            else:
+                print('file does not exist!! ', path)
         img = cv2.imread(path)  
         img = cv2.resize(img, (512, 512))
         if self.cfg.use_lung_seg:
             mask = cv2.imread(f'segmentation/draw/c14/{path.split("/")[-1]}', 0)
             img[:,:,0] = mask 
 
+        assert np.max(img) <256, f'max greater than 255 {np.max(img)}'
+        is_inverted = 0
+        is_lateral = 0
+        if 'inverted' in self.cfg.out_dir:
+            is_inverted = random.randint(0,1)
+            if self.mode in ['test']:
+                is_inverted = 0
+            if is_inverted:
+                img = 255-img
+
+        if 'lateral' in self.cfg.out_dir:
+            is_lateral = random.randint(0,1)
+            if self.mode in ['test']:
+                is_lateral = 0
+
+            if is_lateral:
+                img = cv2.imread(self.lateral_paths[index%len(self.lateral_paths)])
+
         if self.transform is not None:
             res = self.transform(image=img)
             img = res['image']
 
         label = torch.zeros(self.cfg.output_size)
-        lb_str = self.labels[index]
-        for x in lb_str.split('|'):
-            label[self.lb_map[x]] = 1
+        # if self.cfg.output_size == 1:
+        if 'lateral' in self.cfg.out_dir or 'inverted' in self.cfg.out_dir:
+            if is_inverted or is_lateral:
+                label[0] = 1
+            else:
+                label[0] = 0
+        else:
+            lb_str = self.labels[index]
+            for x in lb_str.split('|'):
+                label[self.lb_map[x]] = 1
 
         img = self.tensor_tfms(img)
-        if self.mode == 'test':
+
+        # print(self.mode)
+        if self.mode in ['test']:
             return img
         else:
             return img, label
@@ -362,3 +412,46 @@ class BatchSampler(object):
             return len(self.sampler) // self.batch_size
         else:
             return (len(self.sampler) + self.batch_size - 1) // self.batch_size
+
+class SimpleBalanceClassSampler(Sampler):
+
+    def __init__(self, targets, classes_num):
+
+        self.targets = targets
+        self.classes_num = classes_num
+        
+        # self.samples_num_per_class = np.sum(self.targets, axis=0)
+        # self.max_num = np.max(self.samples_num_per_class)
+        self.max_num=2000 #hardcode 
+        
+        self.indexes_per_class = []
+        # Training indexes of all sound classes. E.g.: 
+        # [[0, 11, 12, ...], [3, 4, 15, 16, ...], [7, 8, ...], ...]
+        for k in range(self.classes_num):
+            self.indexes_per_class.append(
+                np.where(self.targets == (k+1))[0])
+        
+        self.length = self.classes_num * self.max_num
+
+    def __iter__(self):
+        
+        all_indexs = []
+        
+        for k in range(self.classes_num):
+            if len(self.indexes_per_class[k]) == self.max_num:
+                all_indexs.append(self.indexes_per_class[k])
+            elif len(self.indexes_per_class[k]) > self.max_num:
+                random_choice = np.random.choice(self.indexes_per_class[k], int(self.max_num), replace=True)
+                all_indexs.append(np.array(list(random_choice)))
+            else:
+                gap = self.max_num - len(self.indexes_per_class[k])
+                random_choice = np.random.choice(self.indexes_per_class[k], int(gap), replace=True)
+                all_indexs.append(np.array(list(random_choice) + list(self.indexes_per_class[k])))
+                
+        l = np.stack(all_indexs).T
+        l = l.reshape(-1)
+        random.shuffle(l)
+        return iter(l)
+
+    def __len__(self):
+        return int(self.length)

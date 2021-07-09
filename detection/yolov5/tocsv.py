@@ -1,7 +1,13 @@
 import pandas as pd 
 import numpy as np 
+import argparse
 
-meta_df = pd.read_csv('../../data/test_meta.csv')
+parser = argparse.ArgumentParser()
+parser.add_argument('--input_path', default='test_v5neg_0.txt', help='is_wbf2')
+parser.add_argument('--meta_path', default='../../data/test_meta.csv', help='is_wbf2')
+args = parser.parse_args()
+
+meta_df = pd.read_csv(args.meta_path)
 
 meta_dict = {a: {'dim0':b, 'dim1':c} for a,b,c in zip(meta_df.image_id.values, meta_df.dim0.values, meta_df.dim1.values)}
 def parse_txt(filename):
@@ -23,7 +29,7 @@ def parse_txt(filename):
 
     return dets 
 
-dets = parse_txt('test_v5neg_0.txt')
+dets = parse_txt(args.input_path)
 
 print(len(dets.keys()))
 cc = 0
@@ -38,8 +44,10 @@ for img_id, det_boxes in dets.items():
     scores = np.array(dets[img_id]['scores'])
     cls = np.array(dets[img_id]['cls'])
 
+    ppp = ''
     for box, c, score in zip(boxes, cls, scores):
         if int(c) in [1]:
+            ppp = f'none {score} 0 0 1 1'
             continue
 
         x1, y1, x2, y2 = box 
@@ -50,11 +58,11 @@ for img_id, det_boxes in dets.items():
         pred_str += f'opacity {score:.6f} {int(x1+0.5)} {int(y1+0.5)} {int(x2+0.5)} {int(y2+0.5)} '
 
     if pred_str != '':
-        results.append({'image_id': img_id, 'PredictionString':pred_str})
+        results.append({'image_id': img_id, 'PredictionString':pred_str, 'str1': ppp})
 
     cc+=1
     print(cc, end='\r')
 
 print(len(results))
-df = pd.DataFrame(results, columns=['image_id', 'PredictionString'])
-df.to_csv('v5_sml.csv', index=False)
+df = pd.DataFrame(results, columns=['image_id', 'PredictionString', 'str1'])
+df.to_csv('v5_sml1.csv', index=False)

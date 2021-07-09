@@ -14,3 +14,7 @@ segmentation/__pycache__/
 segmentation/draw/
 segmentation/data/
 segmentation/weights/
+detection/*/*pth
+detection/*/*csv
+detection/*/*txt
+detection/*/*npy

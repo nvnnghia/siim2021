@@ -139,8 +139,8 @@ def epoch_update_gamma(y_true, y_pred, epoch=-1, delta=2):
         y_pred: `Tensor` . Predictions.
         """
         sub_sample_size = 2000.0
-        pos = y_pred[y_true==1]
-        neg = y_pred[y_true==0] # yo pytorch, no boolean tensors or operators?  Wassap?
+        pos = y_pred[y_true>0.5]
+        neg = y_pred[y_true<=0.5] # yo pytorch, no boolean tensors or operators?  Wassap?
         # subsample the training set for performance
         cap_pos = pos.shape[0]
         cap_neg = neg.shape[0]

@@ -109,6 +109,9 @@ def map_calc(det_data, gt_data):
     TEMP_FILES_PATH = ".temp_files"
     if not os.path.exists(TEMP_FILES_PATH): # if it doesn't exist already
         os.makedirs(TEMP_FILES_PATH)
+    else:
+        TEMP_FILES_PATH = ".temp_files1"
+        os.makedirs(TEMP_FILES_PATH)
 
     MINOVERLAP = 0.5
 

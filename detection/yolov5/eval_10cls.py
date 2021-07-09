@@ -22,6 +22,12 @@ import shutil
 parser = argparse.ArgumentParser()
 parser.add_argument('--is_val', default=1, help='is_eval')
 parser.add_argument('--is_wbf2', default=0, help='is_wbf2')
+parser.add_argument('--input_path', default='../../data/png512/test/*.png', help='is_wbf2')
+parser.add_argument('--output_path', default='outputs/test_txt_005/', help='is_wbf2')
+parser.add_argument('--weight_path', default='0', help='is_wbf2')
+
+parser.add_argument('--input_size', default=640, help='is_wbf2')
+
 args = parser.parse_args()
 
 
@@ -566,14 +572,18 @@ if __name__ =="__main__":
             # 'runs/cf1_cls1_l_f3/exp/weights/last.pt',
             # 'runs/cf1_cls1_l_f4/exp/weights/last.pt',
 
+            'runs/384cf1_cls1_f0/exp/weights/best.pt',
+            'runs/384cf1_cls1_l_f1/exp/weights/best.pt',
+            'runs/384cf1_cls1_l_f2/exp/weights/best.pt',
+            'runs/384cf1_cls1_l_f3/exp/weights/best.pt',
+            'runs/384cf1_cls1_l_f4/exp/weights/best.pt',
 
 
-
-            # '../yolov5_heatmap/runs/cf1_cls1_f1/exp/weights/best.pt',
-            # '../yolov5_heatmap/runs/cf1_cls1_f2/exp/weights/best.pt',
-            # '../yolov5_heatmap/runs/cf1_cls1_f3/exp/weights/best.pt',
-            # '../yolov5_heatmap/runs/cf1_cls1_f4/exp/weights/best.pt',
-            # '../yolov5_heatmap/runs/cf1_cls1_f0/exp/weights/best.pt',
+            # '../yolov5_heatmap/runs/hmcf1_cls1_f1/exp/weights/best.pt',
+            # '../yolov5_heatmap/runs/hmcf1_cls1_f2/exp/weights/best.pt',
+            # '../yolov5_heatmap/runs/hmcf1_cls1_f3/exp/weights/best.pt',
+            # '../yolov5_heatmap/runs/hmcf1_cls1_f4/exp/weights/best.pt',
+            # '../yolov5_heatmap/runs/hmcf1_cls1_f0/exp/weights/best.pt',
 
             # '../yolov5_heatmap/runs/cf1_cls1_f1/exp/weights/last.pt',
             # '../yolov5_heatmap/runs/cf1_cls1_f2/exp/weights/last.pt',
@@ -588,20 +598,31 @@ if __name__ =="__main__":
             # '../yolov5_heatmap/runs/cf1_cls1_m_f3/exp/weights/best.pt',
             # '../yolov5_heatmap/runs/cf1_cls1_m_f4/exp/weights/best.pt',
 
+            # '../yolov5_heatmap/runs/hmcf1_cls1_l_f0/exp/weights/best.pt',
+            # '../yolov5_heatmap/runs/hmcf1_cls1_l_f1/exp/weights/best.pt',
+            # '../yolov5_heatmap/runs/hmcf1_cls1_l_f2/exp/weights/best.pt',
+            # '../yolov5_heatmap/runs/hmcf1_cls1_l_f3/exp/weights/best.pt',
+            # '../yolov5_heatmap/runs/hmcf1_cls1_l_f4/exp/weights/best.pt',
+
             # '../yolov5_heatmap/runs/cf1_cls1_x_f0/exp/weights/best.pt',
             # '../yolov5_heatmap/runs/cf1_cls1_x_f1/exp/weights/best.pt',
             # '../yolov5_heatmap/runs/cf1_cls1_x_f2/exp/weights/best.pt',
 
-            '../yolov5_heatmap/runs/cf1_cls1_x_f0/exp/weights/last.pt',
-            '../yolov5_heatmap/runs/cf1_cls1_x_f1/exp/weights/last.pt',
-            '../yolov5_heatmap/runs/cf1_cls1_x_f2/exp/weights/last.pt',
+            # '../yolov5_heatmap/runs/cf1_cls1_x_f0/exp/weights/last.pt',
+            # '../yolov5_heatmap/runs/cf1_cls1_x_f1/exp/weights/last.pt',
+            # '../yolov5_heatmap/runs/cf1_cls1_x_f2/exp/weights/last.pt',
 
             ]
+
+    if len(args.weight_path) > 10:
+        weights = glob(args.weight_path)
 
     # weights = [x for x in weights if 'mean' in x]
     print(len(weights))
 
-    sizes = [640]*len(weights)
+    input_size = int(args.input_size)
+
+    sizes = [input_size]*len(weights)
     rots = [0]*len(weights)
 
     for w in tqdm(weights):
@@ -618,13 +639,13 @@ if __name__ =="__main__":
     else:
         # image_list, label_list = get_data('../data/test_pos_005.txt')
         # image_list, label_list = get_data('../final/data/alltest.txt')
-        image_list = glob('../../data/png512/test/*.png')
+        image_list = glob(args.input_path)
         # label_list = [x]
         label_list=None
         if is_wbf2:
             outdir = 'outputs/test_txt_005_wbf2/'
         else:
-            outdir = 'outputs/test_txt_005/'
+            outdir = args.output_path
 
     for cc, (weight, size, rot) in enumerate(zip(weights, sizes, rots)):
         if cc>=0:

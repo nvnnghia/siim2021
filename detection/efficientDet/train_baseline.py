@@ -35,13 +35,13 @@ parser_args, _ = parser.parse_known_args(sys.argv)
 class TrainGlobalConfig:
     SEED = 42 + int(parser_args.fold)
     num_workers = 4
-    batch_size = 4
+    batch_size = 8
     n_epochs = 80
     lr = 0.0002
-    image_size = 512
+    image_size = 384
     fold_number = int(parser_args.fold)
 
-    folder = 'weights/effdet4_fold'+str(fold_number)
+    folder = 'weights/effdet0_fold'+str(fold_number)
     # TRAIN_ROOT_PATH = 'data/train'
 
     verbose = True
@@ -438,6 +438,9 @@ class Fitter:
             batch_size = images.shape[0]
             boxes = [target['boxes'].to(self.device).float() for target in targets]
             labels = [target['labels'].to(self.device).float() for target in targets]
+
+            # print(boxes)
+            # print(labels)
             # print(labels)
             loss, _, _ = self.model(images, boxes, labels)
     
@@ -550,13 +553,13 @@ def intersect_dicts(da, db, exclude=()):
     return {k: v for k, v in da.items() if k in db and not any(x in k for x in exclude) and v.shape == db[k].shape}
 
 def get_net():
-    config = get_efficientdet_config('tf_efficientdet_d4')
+    config = get_efficientdet_config('tf_efficientdet_d5')
     net = EfficientDet(config, pretrained_backbone=False)
     config.num_classes = 1
     config.image_size = opt.image_size
     net.class_net = HeadNet(config, num_outputs=config.num_classes, norm_kwargs=dict(eps=.001, momentum=.01))
 
-    weight_file = 'pretrained/efficientdet_d4-5b370b7a.pth'
+    weight_file = 'pretrained/efficientdet_d5-ef44aea8.pth'
     checkpoint = torch.load(weight_file)
     # checkpoint = torch.load('pretrained/efficientdet_d0-d92fd44f.pth')
     # load_state_dict(net, checkpoint)

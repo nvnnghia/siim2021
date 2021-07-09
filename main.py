@@ -14,7 +14,7 @@ from utils.config import cfg
 from utils.map_func import val_map
 from utils.evaluate import val
 from utils.losses import OnlineLabelSmoothing, FocalLoss, ROCLoss
-from dataset.dataset import SIIMDataset, BatchSampler
+from dataset.dataset import SIIMDataset, BatchSampler, SimpleBalanceClassSampler
 from torch.utils.data import  DataLoader
 from torch.cuda.amp import GradScaler, autocast
 import torch.nn.functional as F
@@ -159,6 +159,9 @@ def get_dataloader(cfg, fold_id):
     train_df = df[df['fold'] != fold_id]
     val_df = df[df['fold'] == fold_id]
 
+    if fold_id not in [0,1,2,3,4]:
+        val_df = df[df['fold'] == 0].head(100)
+
     if cfg.mode in ['pseudo']:
         val_df = df
 
@@ -167,12 +170,14 @@ def get_dataloader(cfg, fold_id):
         val_df = df
 
     if cfg.mode in ['predict']:
-        df = pd.read_csv('data/edata_all.csv')
+        # df = pd.read_csv('data/edata_all1.csv')
+        df = pd.read_csv('data/padchest512.csv')
+        # df = pd.read_csv('data/edata_bimcvrecord.csv')
         val_df = df
 
     if cfg.use_edata and cfg.mode not in ['test']:
-        e_df = pd.read_csv('outputs/n_cf11/n_cf11_predict_st2.csv')
-        # e_df = pd.read_csv('outputs/n_cf13/n_cf13_predict_st3.csv')
+        e_df = pd.read_csv('outputs/n_cf11/n_cf11_predict_st2_all1.csv')
+        # e_df = pd.read_csv('outputs/n_cf11/n_cf11_predict_st2_bmr.csv')
         e_df = e_df[e_df['fold'] != fold_id]
         e_dataset = SIIMDataset(e_df, tfms=transforms_train, cfg=cfg, mode='edata')
         e_loader = DataLoader(e_dataset, batch_size=cfg.batch_size, shuffle=True,  num_workers=8, pin_memory=True)
@@ -183,7 +188,10 @@ def get_dataloader(cfg, fold_id):
         train_df = train_df.head(100)
         val_df = val_df.head(100)
 
-    train_dataset = SIIMDataset(train_df, tfms=transforms_train, cfg=cfg, gen_images = cfg.gen_images)
+    # train_df = pd.read_csv('data/ricord1.csv')
+    train_df = train_df.reset_index(drop=True)
+
+    train_dataset = SIIMDataset(train_df, tfms=transforms_train, cfg=cfg, gen_images = cfg.gen_images, mode = 'train')
     if cfg.muliscale:
         train_loader = DataLoader(dataset=train_dataset,
                         batch_sampler= BatchSampler(RandomSampler(train_dataset),
@@ -194,6 +202,9 @@ def get_dataloader(cfg, fold_id):
                     num_workers=8)
     else:
         train_loader = DataLoader(train_dataset, batch_size=cfg.batch_size, shuffle=True,  num_workers=8, pin_memory=True)
+        # train_loader = DataLoader(train_dataset, 
+        #     sampler=SimpleBalanceClassSampler(train_df.targets.values, 4),
+        #     batch_size=cfg.batch_size, shuffle=False,  num_workers=8, pin_memory=True)
     
     total_steps = len(train_dataset)
 
@@ -249,25 +260,31 @@ def train_func(model, train_loader, scheduler, device, epoch, tr_it):
 
         if cfg.model in ['model_2_1']:
             prediction, prediction1 = predictions
-        elif cfg.model in ['model_4_1']:
+        elif cfg.model in ['model_4_1', 'model_4_2']:
             prediction, prediction1, seg_out = predictions
         elif cfg.model in ['model_4']:
             prediction, seg_out = predictions
         else:
             prediction = predictions
 
+        # print(targets1, prediction)
+
 
         if cfg.loss == 'ce':
-            loss = ce_criterion(prediction, targets1.to(device))
-        elif cfg.loss in ['bce', 'focal']:
-            if cfg.model in ['model_2_1', 'model_4_1']:
+            # loss = ce_criterion(prediction, targets1.to(device)) 
+            if cfg.model in ['model_2_1', 'model_4_1', 'model_4_2']:
+                loss = 0.5*ce_criterion(prediction, targets1.long().to(device)) + 0.5*ce_criterion(prediction1, targets1.long().to(device))
+            else:
+                loss = ce_criterion(prediction, targets.to(device))
+        elif cfg.loss in ['bce', 'focal', 'ranger21']:
+            if cfg.model in ['model_2_1', 'model_4_1', 'model_4_2']:
                 loss = 0.5*criterion(prediction, targets.to(device)) + 0.5*criterion(prediction1, targets.to(device))
             else:
                 loss = criterion(prediction, targets.to(device))
         elif cfg.loss in ['roc']:
             whole_y_pred = np.append(whole_y_pred, prediction.clone().detach().cpu().numpy())
             whole_y_t    = np.append(whole_y_t, targets.clone().detach().cpu().numpy())
-            if cfg.model in ['model_2_1', 'model_4_1']:
+            if cfg.model in ['model_2_1', 'model_4_1', 'model_4_2']:
                 loss = 0.5*roc_criterion(prediction, targets.to(device), epoch) + 0.5*roc_criterion1(prediction1, targets.to(device), epoch)
                 whole_y_pred1 = np.append(whole_y_pred1, prediction1.clone().detach().cpu().numpy())
             else:
@@ -277,7 +294,7 @@ def train_func(model, train_loader, scheduler, device, epoch, tr_it):
 
         if cfg.stage>0:
             # loss += 0.5*criterion(prediction, oof_targets.to(device))
-            if cfg.model in ['model_2_1', 'model_4_1']:
+            if cfg.model in ['model_2_1', 'model_4_1', 'model_4_2']:
                 stage_loss = 0.5*criterion(prediction, oof_targets.float().to(device)) + 0.5*criterion(prediction1, oof_targets.float().to(device))
             else:
                 stage_loss = criterion(prediction, oof_targets.float().to(device))
@@ -286,10 +303,12 @@ def train_func(model, train_loader, scheduler, device, epoch, tr_it):
         
 
         if cfg.use_seg:
-            hm_loss = seg_criterion(seg_out[:,0,:,:], hms[:,:,:,0].to(device))
+            # print(seg_out.shape, hms.shape)
+            # hm_loss = seg_criterion(seg_out[:,0,:,:], hms[:,:,:,0].to(device))
+            hm_loss = seg_criterion(seg_out[:hms.shape[0],0,:,:], hms.to(device))
             
             ratio = sigmoid_rampup(epoch, cfg.epochs)
-            ratio = 10*(1-ratio)
+            ratio = 1*(1-ratio)
 
             loss += ratio*hm_loss
         
@@ -326,7 +345,7 @@ def train_func(model, train_loader, scheduler, device, epoch, tr_it):
         last_whole_y_t = torch.tensor(whole_y_t).cuda()
         last_whole_y_pred = torch.tensor(whole_y_pred).cuda()
         roc_criterion.update(last_whole_y_t, last_whole_y_pred, epoch)
-        if cfg.model in ['model_2_1', 'model_4_1']:
+        if cfg.model in ['model_2_1', 'model_4_1', 'model_4_2']:
             last_whole_y_pred1 = torch.tensor(whole_y_pred1).cuda()
             roc_criterion1.update(last_whole_y_t, last_whole_y_pred1, epoch)
 
@@ -355,7 +374,7 @@ def valid_func(model, valid_loader):
 
             sz = images.size()[0]
 
-            flip = 1 
+            flip = 1
             if flip:
                 images = torch.stack([images,images.flip(-1)],0) # hflip
                 images = images.view(-1, 3, images.shape[-1], images.shape[-1])
@@ -364,7 +383,7 @@ def valid_func(model, valid_loader):
 
             if cfg.model in ['model_2_1']:
                 logits, prediction1 = predictions
-            elif cfg.model in ['model_4_1']:
+            elif cfg.model in ['model_4_1', 'model_4_2']:
                 logits, prediction1, seg_out = predictions
             elif cfg.model in ['model_4']:
                 logits, seg_out = predictions
@@ -372,20 +391,24 @@ def valid_func(model, valid_loader):
                 logits = predictions
 
             if cfg.loss == 'ce':
-                loss = ce_criterion(logits, targets1.to(device))
-            elif cfg.loss in ['bce', 'focal']:
-                if cfg.model in ['model_2_1', 'model_4_1']:
+                # loss = ce_criterion(logits, targets1.to(device)) 
+                if cfg.model in ['model_2_1', 'model_4_1', 'model_4_2']:
+                    loss = ce_criterion(logits[:sz], targets1.to(device)) + ce_criterion(prediction1[:sz], targets1.to(device))
+                else:
+                    loss = ce_criterion(logits, targets1.to(device))
+            elif cfg.loss in ['bce', 'focal', 'ranger21', 'roc']:
+                if cfg.model in ['model_2_1', 'model_4_1', 'model_4_2']:
                     loss = criterion(logits[:sz], targets) + criterion(prediction1[:sz], targets)
                 else:
-                    loss = criterion(logits, targets)
+                    loss = criterion(logits[:sz], targets)
             else:
                 loss = 0.2*ce_criterion(prediction1, targets1.to(device)) + 0.5*criterion(logits, targets)
 
             if cfg.model in ['model_2']: #use bceloss
                 prediction = logits
             else:
-                if cfg.loss in ['bce', 'focal']:
-                    if cfg.model in ['model_2_1', 'model_4_1']:
+                if cfg.loss in ['bce', 'focal', 'ranger21', 'roc']:
+                    if cfg.model in ['model_2_1', 'model_4_1', 'model_4_2']:
                         if flip:
                             prediction = F.sigmoid(logits)/2 + F.sigmoid(prediction1)/2
                             prediction = (prediction[:sz] + prediction[sz:]) / 2
@@ -393,8 +416,18 @@ def valid_func(model, valid_loader):
                             prediction = F.sigmoid(logits)/2 + F.sigmoid(prediction1)/2
                     else:
                         prediction = F.sigmoid(logits)
+                        if flip:
+                            prediction = (prediction[:sz] + prediction[sz:]) / 2
                 elif cfg.loss == 'ce':
-                    prediction = F.softmax(logits)
+                    # prediction = F.softmax(logits)
+                    if cfg.model in ['model_2_1', 'model_4_1', 'model_4_2']:
+                        if flip:
+                            prediction = F.softmax(logits)/2 + F.softmax(prediction1)/2
+                            prediction = (prediction[:sz] + prediction[sz:]) / 2
+                        else:
+                            prediction = F.softmax(logits)/2 + F.softmax(prediction1)/2
+                    else:
+                        prediction = F.softmax(logits)/2 + F.softmax(prediction1)/2
                 else:
                     prediction = 0.5*F.sigmoid(logits) + 0.5*F.softmax(logits1)
 
@@ -477,7 +510,7 @@ def test_func(model, valid_loader):
 
             if cfg.model in ['model_2_1']:
                 logits, prediction1 = predictions
-            elif cfg.model in ['model_4_1']:
+            elif cfg.model in ['model_4_1', 'model_4_2']:
                 logits, prediction1, seg_out = predictions
             elif cfg.model in ['model_4']:
                 logits, seg_out = predictions
@@ -489,12 +522,14 @@ def test_func(model, valid_loader):
                 prediction = logits
             else:
                 if cfg.loss in ['bce', 'focal']:
-                    if cfg.model in ['model_2_1', 'model_4_1']:
+                    if cfg.model in ['model_2_1', 'model_4_1', 'model_4_2']:
                         prediction = F.sigmoid(logits)/2 + F.sigmoid(prediction1)/2
                         if flip:
                             prediction = (prediction[:sz] + prediction[sz:]) / 2
                     else:
                         prediction = F.sigmoid(logits)
+                        if flip:
+                            prediction = (prediction[:sz] + prediction[sz:]) / 2
                 elif cfg.loss == 'ce':
                     prediction = F.softmax(logits)
                 else:
@@ -518,7 +553,7 @@ def intersect_dicts(da, db, exclude=()):
 if __name__ == "__main__":
     set_seed(cfg["seed"])
 
-    if cfg.model in ['model_4', 'model_4_1']:
+    if cfg.model in ['model_4', 'model_4_1', 'model_4_2']:
         print("[ √ ] Using segmentation")
         cfg.use_seg = True
 
@@ -547,12 +582,14 @@ if __name__ == "__main__":
             if cfg.model in ['model_2']:
                 criterion = torch.nn.BCELoss()
             else:
+                # criterion = torch.nn.BCEWithLogitsLoss(pos_weight = torch.as_tensor([1,1,3,2,1], dtype=torch.float).cuda())
                 criterion = torch.nn.BCEWithLogitsLoss()
 
             # ce_criterion = torch.nn.CrossEntropyLoss()
             if cfg.loss in ['ce', 'all']:
-                ce_criterion = OnlineLabelSmoothing(alpha=0.5, n_classes=cfg.output_size, smoothing=0.1)
-                ce_criterion.to(device)
+                # ce_criterion = OnlineLabelSmoothing(alpha=0.5, n_classes=cfg.output_size, smoothing=0.1)
+                # ce_criterion.to(device)
+                ce_criterion = torch.nn.CrossEntropyLoss()
             elif cfg.loss in ['focal']:
                 criterion = FocalLoss()
             elif cfg.loss in ['roc']:
@@ -560,7 +597,8 @@ if __name__ == "__main__":
                 roc_criterion1 = ROCLoss()
 
             if cfg.use_seg:
-                seg_criterion = torch.nn.MSELoss()
+                # seg_criterion = torch.nn.MSELoss()
+                seg_criterion = torch.nn.BCEWithLogitsLoss()
 
             if cfg.weight_file:
                 exclude = []  # exclude keys

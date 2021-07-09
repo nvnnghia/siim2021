@@ -15,7 +15,7 @@ class ECANFNET(nn.Module):
         else:
             raise NotImplementedError(f"pooling type {pool} has not implemented!")
 
-        self.model = timm.create_model('vit_large_patch16_384', pretrained=False) #cait_xs24_384 coat_lite_small swin_base_patch4_window12_384 vit_deit_base_distilled_patch16_384
+        self.model = timm.create_model('cait_xs24_384', pretrained=False) #cait_xs24_384 coat_lite_small swin_base_patch4_window12_384 vit_deit_base_distilled_patch16_384
         # self.model.stem.conv1 = ScaledStdConv2d(in_channels = 6, out_channels=self.model.stem.conv1.out_channels, 
         #     kernel_size=self.model.stem.conv1.kernel_size[0], stride=self.model.stem.conv1.stride[0])
 
@@ -53,21 +53,53 @@ class ECANFNET(nn.Module):
         self.model.head = nn.Identity()
         self.model.head_dist = None
 
+    def forward_features(self, x):
+        B = x.shape[0]
+        x = self.model.patch_embed(x)
+        print(x.shape)
+        cls_tokens = self.model.cls_token.expand(B, -1, -1)
+
+        x = x + self.model.pos_embed
+        x = self.model.pos_drop(x)
+
+        for i, blk in enumerate(self.model.blocks):
+            x = blk(x)
+
+        print(x.shape)
+        for i, blk in enumerate(self.model.blocks_token_only):
+            cls_tokens = blk(x, cls_tokens)
+
+        x = torch.cat((cls_tokens, x), dim=1)
+        print(x.shape)
+
+        x = self.model.norm(x)
+        return x[:, 0]
+
     def forward(self, x):
         bs = x.size(0)
-        features = self.model(x)
-        print(features[0].shape, features[1].shape)
+        # features = self.model(x)
+        # print(features[0].shape, features[1].shape)
         # x = self.model.stem(x)
         # print(x.shape)
         # # x = self.model.stages(x)
-        # for m in self.model.features:
-            # print(dir(m))
-            # x = m(x)
-            # print(x.shape)
+
+        x = self.forward_features(x)
+        # x = self.model.patch_embed(x)
+        # x = self.model.pos_drop(x)
+        # print(x.shape)
+        # for m in self.model.blocks:
+        #     # print(dir(m))
+        #     x = m(x)
+        #     print(x.shape)
+
+        # x = self.model.blocks_token_only(x)
+        print(x.shape)
+        features = x
         # x = self.model.final_conv(x)
         # # print(x.shape)
         # features = self.model.final_act(x)
-        # print(x.shape)
+        # print(x.shape)  
+
         # x = self.model.head(x)
         # pooled_features = self.pooling(features).view(bs, -1)
         output = self.fc(self.dropout(features))

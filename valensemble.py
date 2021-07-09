@@ -33,16 +33,32 @@ oof_list = [
 
 	# 'outputs/n_cf16_512/oofs3.csv', #620
 
-	'outputs/n_cf16_lbsm/oofs3.csv', #622
+	# 'outputs/n_cf16_lbsm/oofs3.csv', #622
 	# 'outputs/n_cf16_lbsm/oofs2.csv', #623
 
-	'outputs/n_cf19_lbsm/oofs3.csv', #623
+	# 'outputs/n_cf19_lbsm/oofs3.csv', #623
+
+	# 'outputs/n_cf16_1cls/oofs2.csv'
+
+	# 'outputs/n_cf16_lbsm_1/oofs3.csv',
+	# 'outputs/n_cf16_lbsm_2/oofs2.csv',
+	# 'outputs/n_cf16_lbsm_3/oofs3.csv',
+
+	# 'outputs/n_cf2_debug/oofs2.csv',
+
+	'outputs/n_cf25/oofs2.csv',
+	# 'outputs/n_cf24_cait/oofs1.csv',
+
+	# 'outputs/n_cf26/oofs3.csv',
+	'outputs/n_cf27/oofs3.csv',
 ]
 
 # weights = [1, 3]
 weights = [1]*len(oof_list)
 
 df = pd.read_csv(oof_list[0])
+
+df['pred_cls5'] = 1 - df['pred_cls5']
 
 # for col in ['pred_cls1', 'pred_cls2', 'pred_cls3' ,'pred_cls4']:
 # 	df[col] = pd.Series(df[col].values).rank(pct = True).values
@@ -62,6 +78,22 @@ df[['pred_cls1', 'pred_cls2', 'pred_cls3' ,'pred_cls4']] /= sum(weights)
 # df['pred_cls2'] = df['pred_cls2']*(df['pred_cls5'])
 # df['pred_cls3'] = df['pred_cls3']*(df['pred_cls5'])
 # df['pred_cls4'] = df['pred_cls4']*(df['pred_cls5'])
+
+# max_scores = np.load('detection/yolov5/max_scores.npy', allow_pickle=True).item()
+# for i in range(df.shape[0]):
+# 	cols = ['pred_cls1', 'pred_cls2', 'pred_cls3' ,'pred_cls4']
+# 	prob = df[cols].iloc[i].values 
+# 	image_id = df[['image_id']].iloc[i].values 
+# 	# print(prob, image_id)
+# 	score = max_scores[f'{image_id[0]}.png']
+
+# 	df.at[i,cols[0]]= prob[0] + (score)
+# 	df.at[i,cols[1]]= prob[1]*(score)
+# 	df.at[i,cols[2]]= prob[2]*(score)
+# 	df.at[i,cols[3]]= prob[3]*(score)
+
+
+	# break
 
 # for i in range(df.shape[0]):
 # 	cols = ['pred_cls1', 'pred_cls2', 'pred_cls3' ,'pred_cls4']
@@ -90,3 +122,4 @@ df[['pred_cls1', 'pred_cls2', 'pred_cls3' ,'pred_cls4']] /= sum(weights)
 # df['pred_cls4'] = df['pred_cls4']*scale_factors[3]
 
 val(df)
+# val(df, num=1)

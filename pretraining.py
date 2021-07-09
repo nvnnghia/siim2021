@@ -157,7 +157,11 @@ def get_dataloader(cfg, fold_id):
     for fold_id, (train_index, test_index) in enumerate(kf.split(df)):
         df.iloc[test_index, -1] = fold_id
 
-    train_df = df[df['fold'] != fold_id]
+    if 'lateral' in cfg.out_dir or 'inverted' in cfg.out_dir:
+        train_df = df[df['fold'] == 1]
+    else:
+        train_df = df[df['fold'] != fold_id]
+    # 
     val_df = df[df['fold'] == fold_id]
 
     if cfg.mode in ['pseudo']:
@@ -348,6 +352,47 @@ def valid_func(model, valid_loader):
 
     return loss_valid, micro_score, macro_score, auc, map, pred_probs
 
+def test_func(model, valid_loader):
+    model.eval()
+    bar = tqdm(valid_loader)
+
+    pred_probs = []
+
+    with torch.no_grad():
+        for batch_idx, batch_data in enumerate(bar):
+            images = batch_data
+
+            # for img in images:
+            #     print(img.shape)
+            # print('===')
+            images = images.to(device)
+
+            if cfg.use_seg:
+                logits, seg_out = model(images)
+            else:
+                logits = model(images)
+
+            if cfg.model in ['model_2']: #use bceloss
+                prediction = logits
+            else:
+                if cfg.loss == 'bce':
+                    prediction = F.sigmoid(logits)
+                elif cfg.loss == 'ce':
+                    prediction = F.softmax(logits)
+                else:
+                    prediction = 0.5*F.sigmoid(logits) + 0.5*F.softmax(logits1)
+
+            proba = prediction.detach().cpu().numpy()
+
+            pred_probs.append(proba)
+
+            if batch_idx>30 and cfg.debug:
+                break
+            
+    pred_probs = np.concatenate(pred_probs)
+
+    return pred_probs
+
 if __name__ == "__main__":
     set_seed(cfg["seed"])
 
@@ -458,4 +503,30 @@ if __name__ == "__main__":
                 neptune.stop()
 
             del model, scheduler, optimizer
+            gc.collect()
+
+        if cfg.mode == 'test':
+            transforms_valid = albumentations.Compose([
+                albumentations.Resize(cfg.input_size, cfg.input_size),
+            ])
+            val_df = pd.read_csv('data/edata_all1.csv')
+            val_dataset = C14Dataset(val_df, tfms=transforms_valid, cfg=cfg, mode='test')
+            val_loader = DataLoader(val_dataset, batch_size=cfg.batch_size, shuffle=False,  num_workers=8, pin_memory=True)
+
+            model = get_model(cfg).to(device)
+            # chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth'
+            # chpt_path = f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth'
+            chpt_path = f'{cfg.out_dir}/best_loss_fold{fold_id}_st{cfg.stage}.pth'
+            checkpoint = torch.load(chpt_path, map_location="cpu")
+            model.load_state_dict(checkpoint)
+            del checkpoint
+            gc.collect()
+
+            pred_probs = test_func(model, val_loader)
+
+            val_df[f'score'] = pred_probs
+
+            val_df.to_csv(f'{cfg.out_dir}/{cfg.name}_{cfg.mode}_st{cfg.stage}.csv', index=False)
+
+            del model 
             gc.collect()

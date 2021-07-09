@@ -4,9 +4,17 @@ from ensemble_boxes import weighted_boxes_fusion, soft_nms, nms, non_maximum_wei
 import cv2
 import os 
 from glob import glob 
+import argparse
 import warnings
 from warnings import filterwarnings
 filterwarnings("ignore")
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--input_path', default='', help='is_wbf2')
+parser.add_argument('--image_path', default='../../data/png512/test/*.png', help='is_wbf2')
+args = parser.parse_args()
+
 
 def parse_yolov5(filename):
     with open(filename) as f:
@@ -17,6 +25,9 @@ def parse_yolov5(filename):
         x1, y1, x2, y2 = list(map(float, [x1, y1, x2, y2]))
 
         # if (x2-x1)*(y2-y1) < 10:
+        #     continue
+
+        # if float(score) < 0.1:
         #     continue
 
         if img_name not in dets.keys():
@@ -299,50 +310,60 @@ def run_wbf(list_boxes, list_scores, list_classes, im_w=1024, im_h=1024, weights
 if __name__ == '__main__':
 
     # is_wbf2 = 0 
-    is_wbf2 = False
+    is_wbf2 = 1
 
-    if not is_wbf2:
-        # yolov5_files = glob('outputs/test_txt_005/*.txt')
-        yolov5_files = glob('outputs/val_txt/*.txt')
+    if len(args.input_path) > 10:
+        yolov5_files = glob(args.input_path)
 
     else:
-        yolov5_files = glob('yolov5/test_txt_005_wbf2/*best*.txt')
-        # mm_files = glob('mmdetection/test_txt_wbf2/*_iou05.txt')
-        # d6_files = glob('d6_test_txt_005_wbf2/*.txt')
+        # if not is_wbf2:
+        # yolov5_files = glob('outputs/test/*.txt')
+        yolov5_files = glob('outputs/val/*384*.txt')
 
-        # # print(yolov5_files[:5])
-        # print(len(yolov5_files), len(mm_files), len(d6_files))
+        # else:
+            # yolov5_files = glob('yolov5/test_txt_005_wbf2/_yolov5_heatmap_runs_hmcf1_cls1_l_f*_exp_weights_best*.txt')
+            # mm_files = glob('mmdetection/test_txt_wbf2/*_iou05.txt')
+            # d6_files = glob('d6_test_txt_005_wbf2/*.txt')
 
-        # yolov5_files = yolov5_files + mm_files + d6_files
+            # # print(yolov5_files[:5])
+            # print(len(yolov5_files), len(mm_files), len(d6_files))
 
-    eff_files = glob('../efficientDet/outputs/val_txt/*.txt')
-    # eff_files = [
-    #     '../efficientDet/outputs/val_txt/weights_effdet6_v1_fold0_best_checkpoint_076epoch.txt',
-    #     '../efficientDet/outputs/val_txt/weights_effdet6_fold1_best_checkpoint_068epoch.txt',
-    #     '../efficientDet/outputs/val_txt/weights_effdet6_fold2_best_checkpoint_056epoch.txt',
-    #     '../efficientDet/outputs/val_txt/weights_effdet6_fold3_best_checkpoint_054epoch.txt',
-    #     '../efficientDet/outputs/val_txt/weights_effdet6_fold4_best_checkpoint_055epoch.txt',
+            # yolov5_files = yolov5_files + mm_files + d6_files
 
-    #     '../efficientDet/outputs/val_txt/weights_effdet4_fold0_best_checkpoint_035epoch.txt',
-    #     '../efficientDet/outputs/val_txt/weights_effdet4_fold1_best_checkpoint_070epoch.txt',
-    #     '../efficientDet/outputs/val_txt/weights_effdet4_fold2_best_checkpoint_049epoch.txt',
-    #     '../efficientDet/outputs/val_txt/weights_effdet4_fold3_best_checkpoint_042epoch.txt',
-    #     # '../efficientDet/outputs/val_txt/weights_effdet4_fold3_best_checkpoint_042epoch.txt',
-    # ]
+        # eff_files = glob('../efficientDet/outputs/val_txt/*.txt') #50.28 - 51.32 50.29-51.91
+        # eff_files = [
+        #     '../efficientDet/outputs/val_txt/weights_effdet6_v1_fold0_best_checkpoint_076epoch.txt',
+        #     '../efficientDet/outputs/val_txt/weights_effdet6_fold1_best_checkpoint_068epoch.txt',
+        #     '../efficientDet/outputs/val_txt/weights_effdet6_fold2_best_checkpoint_056epoch.txt',
+        #     '../efficientDet/outputs/val_txt/weights_effdet6_fold3_best_checkpoint_054epoch.txt',
+        #     '../efficientDet/outputs/val_txt/weights_effdet6_fold4_best_checkpoint_055epoch.txt',
 
-    # eff_files = [
-    #     '../efficientDet/outputs/test_txt/weights_effdet6_fold0_best_checkpoint_076epoch.txt',
-    #     '../efficientDet/outputs/test_txt/weights_effdet6_fold1_best_checkpoint_068epoch.txt',
-    #     '../efficientDet/outputs/test_txt/weights_effdet6_fold2_best_checkpoint_056epoch.txt',
-    #     '../efficientDet/outputs/test_txt/weights_effdet6_fold3_best_checkpoint_054epoch.txt',
-    #     '../efficientDet/outputs/test_txt/weights_effdet6_fold4_best_checkpoint_055epoch.txt',
-    # ]
+        #     '../efficientDet/outputs/val_txt/weights_effdet4_fold0_best_checkpoint_035epoch.txt',
+        #     '../efficientDet/outputs/val_txt/weights_effdet4_fold1_best_checkpoint_070epoch.txt',
+        #     '../efficientDet/outputs/val_txt/weights_effdet4_fold2_best_checkpoint_049epoch.txt',
+        #     '../efficientDet/outputs/val_txt/weights_effdet4_fold3_best_checkpoint_042epoch.txt',
+        #     # '../efficientDet/outputs/val_txt/weights_effdet4_fold3_best_checkpoint_042epoch.txt',
+        # ]
+
+        # eff_files = [
+        #     '../efficientDet/outputs/test_txt/weights_effdet6_fold0_best_checkpoint_076epoch.txt',
+        #     '../efficientDet/outputs/test_txt/weights_effdet6_fold1_best_checkpoint_068epoch.txt',
+        #     '../efficientDet/outputs/test_txt/weights_effdet6_fold2_best_checkpoint_056epoch.txt',
+        #     '../efficientDet/outputs/test_txt/weights_effdet6_fold3_best_checkpoint_054epoch.txt',
+        #     '../efficientDet/outputs/test_txt/weights_effdet6_fold4_best_checkpoint_055epoch.txt',
+        # ]
 
 
 
-    yolov5_files += eff_files
+        # yolov5_files += eff_files
+        # yolov5_files = eff_files
 
     # yolov5_files.append('../efficientDet/outputs/val_txt/weights_effdet6_v1_fold0_best_checkpoint_076epoch.txt')
+
+    yolov5_files1 = glob('../yolov5_multipleheads/outputs/val/*384*.txt')
+    yolov5_files += yolov5_files1
+
+    # yolov5_files = [x for x in yolov5_files if '_l_' not in x]
 
     print(len(yolov5_files))
 
@@ -353,15 +374,16 @@ if __name__ == '__main__':
         det_data.append(yolov5_dets)
         weights.append(1)
 
+    # image_list = glob(args.image_path)
     image_list = glob('../../data/png512/train/*.png')
-    # image_list = glob('../../data/png512/test/*.png')
 
     # image_list1 = glob('data/test/*')
     # image_list = [x for x in image_list1 if f'../{x}' not in image_list]
     # print(len(image_list))
 
-    ofile = open(f'test_v5neg_{2*is_wbf2}.txt', 'w')
+    ofile = open(f'test_v5neg_{2*is_wbf2}a.txt', 'w')
 
+    # max_scores = {}
     count=0
     for img_path in image_list:
         # image = cv2.imread(img_path) 
@@ -408,7 +430,7 @@ if __name__ == '__main__':
                 enweights.append(w)
 
         if len(enscores)>0:
-            boxes, scores, classes = run_wbf(enboxes, enscores, enlabels, im_w, im_h, weights=enweights, iou_thr=0.55, skip_box_thr=0.001)
+            boxes, scores, classes = run_wbf(enboxes, enscores, enlabels, im_w, im_h, weights=enweights, iou_thr=0.5, skip_box_thr=0.001)
             for box, score, cls in zip(boxes, scores, classes):
                 # x1, y1, x2, y2 = list(map(int, box[:4]))
                 # over_ratio = np.sum(mask[y1:y2, x1:x2])/((x2-x1)*(y2-y1))
@@ -416,7 +438,18 @@ if __name__ == '__main__':
                 #     score = score*over_ratio
                 ofile.write(f'{img_path.split("/")[-1]} {cls:.1f} {box[0]} {box[1]} {box[2]} {box[3]} {score}\n')
 
+        # cls1_score = 1
+        # for dets, w in zip(det_data, weights):
+        #     if img_path.split('/')[-1] in dets.keys():
+        #         scores = np.array(dets[img_path.split('/')[-1]]['scores'])
+        #         cls1_score*=np.max(scores)
+
+        # ofile.write(f'{img_path.split("/")[-1]} 1.0 0 0 1 1 {1-cls1_score}\n')
+
+        # max_scores[img_path.split("/")[-1]] = 1-cls1_score
+
         count+=1
         print(count, end='\r')
 
     ofile.close()
+    # np.save('max_scores.npy', max_scores)
