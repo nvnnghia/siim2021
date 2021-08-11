@@ -33,14 +33,12 @@
 ## Data
 * Download dataset to data/
 * run `python create_folds.py` to split train data into folds
-* pretrained checkpoint on NIH dataset: https://www.kaggle.com/ammarali32/startingpointschestx
 *source: https://github.com/v7labs/covid-19-xray-dataset, https://github.com/ieee8023/covid-chestxray-dataset
 ## Train
 * Create config file for each experiments, for example configs/n_cf1.py
 * Train: `python main.py -C n_cf1`
 * Val: `python main.py -C n_cf1 -M val`
 * Create pseudo label: `python main.py -C n_cf1 -M pseudo`
-* Autoalbument search: `autoalbument-create --config-dir search --task classification --num-classes 4 & autoalbument-search --config-dir search`
 * C14 Pretraining: `CUDA_VISIBLE_DEVICES=1 python pretraining.py -C n_cf2_pretraining`
 
 ## TODO
@@ -55,9 +53,6 @@
 - [x] Auxilliary segmentation head
 - [x] Multiple head
 - [ ] Training and Test model
-- [x] Progressive training
-- [ ] TTA training
-
 
 ## Results
 * multiple stage training
