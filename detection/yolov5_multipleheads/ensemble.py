@@ -4,6 +4,7 @@ from ensemble_boxes import weighted_boxes_fusion, soft_nms, nms, non_maximum_wei
 import cv2
 import os 
 from glob import glob 
+import pandas as pd
 import argparse
 import warnings
 from warnings import filterwarnings
@@ -314,9 +315,21 @@ if __name__ == '__main__':
 
     else:
         # if not is_wbf2:
-        yolov5_files = glob('outputs/test/*nfnet*.txt')
+        yolov5_files = glob('outputs/test/*384*.txt')
         # yolov5_files = glob('outputs/val/*384*.txt')
 
+
+        # yolov5_files = [x for x in yolov5_files if 'r34' in x or 'res50' in x or 'r101' in x or 'r152' in x or '_x_' in x or '_m_' in x or '_l_' in x]
+        yolov5_files = [x for x in yolov5_files if '_x_' in x or 'res50' in x or 'r101' in x or '_m_' in x or '_l0_' in x]
+        # yolov5_files = [x for x in yolov5_files if '_cm_' in x]
+
+        # # yolov5_files = []
+        # yolox_files = glob('/home/pintel/nvnn/code/YOLOX/outputs/val/*.txt')
+        yolox_files = glob('/home/pintel/nvnn/code/YOLOX/outputs/test/*.txt')
+# 
+        yolox_files = [x for x in yolox_files if '_d_' in x or '_m_' in x ]
+
+        yolov5_files += yolox_files
         # else:
             # yolov5_files = glob('yolov5/test_txt_005_wbf2/_yolov5_heatmap_runs_hmcf1_cls1_l_f*_exp_weights_best*.txt')
             # mm_files = glob('mmdetection/test_txt_wbf2/*_iou05.txt')
@@ -355,9 +368,19 @@ if __name__ == '__main__':
         # yolov5_files += eff_files
         # yolov5_files = eff_files
 
-    # yolov5_files.append('../efficientDet/outputs/val_txt/weights_effdet6_v1_fold0_best_checkpoint_076epoch.txt')
-    # yolov5_files1 = glob('../yolov5/outputs/val/*heatmap*384*.txt')
-    # yolov5_files += yolov5_files1
+    # yolov5_files.append('det_pred.txt')
+
+    # yolov5_files = glob('../efficientDet/outputs/val_txt/*.txt')
+
+    # yolov5_files1 = glob('../efficientDet/outputs/val_txt/*.txt')
+    yolov5_files1 = glob('../efficientDet/outputs/test_txt/*.txt')
+    yolov5_files += yolov5_files1 
+
+    # yolov5_files = [x for x in yolov5_files if '_l0_' not in x and 'nfnet' not in x and '_l2_' not in x]
+
+    # yolov5_files = [x for x in yolov5_files if '_nfnet_'  in x]
+
+    # yolov5_files = [x for x in yolov5_files if 'r34' in x or  'r152' in x]
 
     print(len(yolov5_files))
 
@@ -378,6 +401,7 @@ if __name__ == '__main__':
     ofile = open(f'test_v5neg_{2*is_wbf2}a.txt', 'w')
 
     # max_scores = {}
+    none_data = []
     count=0
     for img_path in image_list:
         # image = cv2.imread(img_path) 
@@ -423,8 +447,9 @@ if __name__ == '__main__':
                 enlabels.append(np.array(c_classes))
                 enweights.append(w)
 
+        none_score = 0
         if len(enscores)>0:
-            boxes, scores, classes = run_wbf(enboxes, enscores, enlabels, im_w, im_h, weights=enweights, iou_thr=0.4, skip_box_thr=0.001)
+            boxes, scores, classes = run_wbf(enboxes, enscores, enlabels, im_w, im_h, weights=enweights, iou_thr=0.4, skip_box_thr=0.0001)
             # print(classes, scores)
             # for s,c in zip(scores, classes):
             #     if c==1:
@@ -435,13 +460,16 @@ if __name__ == '__main__':
                 # raise
 
             for box, score, cls in zip(boxes, scores, classes):
-                # if cls == 1:
+                if cls == 1:
+                    none_score = score
                 #     continue
                 # x1, y1, x2, y2 = list(map(int, box[:4]))
                 # over_ratio = np.sum(mask[y1:y2, x1:x2])/((x2-x1)*(y2-y1))
                 # if over_ratio<0.5:
                 #     score = score*over_ratio
                 ofile.write(f'{img_path.split("/")[-1]} {cls:.1f} {box[0]} {box[1]} {box[2]} {box[3]} {score}\n')
+
+        none_data.append({'image_id': img_path.split("/")[-1].split('.')[0], 'none_score': none_score})
 
         # cls1_score = 1
         # for dets, w in zip(det_data, weights):
@@ -458,3 +486,4 @@ if __name__ == '__main__':
 
     ofile.close()
     # np.save('max_scores.npy', max_scores)
+    pd.DataFrame(none_data).to_csv('v5.csv', index=False)

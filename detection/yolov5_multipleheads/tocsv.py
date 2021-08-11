@@ -58,11 +58,11 @@ for img_id, det_boxes in dets.items():
         pred_str += f'opacity {score:.6f} {int(x1+0.5)} {int(y1+0.5)} {int(x2+0.5)} {int(y2+0.5)} '
 
     if pred_str != '':
-        results.append({'image_id': img_id, 'PredictionString':pred_str, 'str1': ppp})
+        results.append({'image_id': img_id, 'PredictionString':pred_str, 'none': ppp})
 
     cc+=1
     print(cc, end='\r')
 
 print(len(results))
-df = pd.DataFrame(results, columns=['image_id', 'PredictionString', 'str1'])
-df.to_csv('v5_sml1.csv', index=False)
+df = pd.DataFrame(results, columns=['image_id', 'PredictionString', 'none'])
+df.to_csv('6model_cv573.csv', index=False)

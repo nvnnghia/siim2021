@@ -15,9 +15,10 @@ class ECANFNET(nn.Module):
         else:
             raise NotImplementedError(f"pooling type {pool} has not implemented!")
 
-        self.model = timm.create_model('cait_xs24_384', pretrained=False) #cait_xs24_384 coat_lite_small swin_base_patch4_window12_384 vit_deit_base_distilled_patch16_384
+        self.model = timm.create_model('eca_nfnet_l1', pretrained=False) #cait_xs24_384 coat_lite_small swin_base_patch4_window12_384 vit_deit_base_distilled_patch16_384
         # self.model.stem.conv1 = ScaledStdConv2d(in_channels = 6, out_channels=self.model.stem.conv1.out_channels, 
         #     kernel_size=self.model.stem.conv1.kernel_size[0], stride=self.model.stem.conv1.stride[0])
+        self.model.stem.conv1.stride = (1, 1)
 
         print(self.model)
         # print(self.model.stem.conv1.in_channels)
@@ -47,11 +48,11 @@ class ECANFNET(nn.Module):
         # self.model.classifier = nn.Identity()
         # self.model.global_pool = nn.Identity()
 
-        self.fc = nn.Linear(self.model.head.in_features, out_dim)
-        self.dropout = nn.Dropout(dropout)
+        # self.fc = nn.Linear(self.model.head.in_features, out_dim)
+        # self.dropout = nn.Dropout(dropout)
 
         self.model.head = nn.Identity()
-        self.model.head_dist = None
+        # self.model.head_dist = None
 
     def forward_features(self, x):
         B = x.shape[0]
@@ -83,7 +84,7 @@ class ECANFNET(nn.Module):
         # print(x.shape)
         # # x = self.model.stages(x)
 
-        x = self.forward_features(x)
+        # x = self.forward_features(x)
         # x = self.model.patch_embed(x)
         # x = self.model.pos_drop(x)
         # print(x.shape)
@@ -93,8 +94,8 @@ class ECANFNET(nn.Module):
         #     print(x.shape)
 
         # x = self.model.blocks_token_only(x)
-        print(x.shape)
-        features = x
+        # print(x.shape)
+        # features = x
         # x = self.model.final_conv(x)
         # # print(x.shape)
         # features = self.model.final_act(x)
@@ -102,7 +103,20 @@ class ECANFNET(nn.Module):
 
         # x = self.model.head(x)
         # pooled_features = self.pooling(features).view(bs, -1)
-        output = self.fc(self.dropout(features))
+        # output = self.fc(self.dropout(features))
+
+        x = self.model.stem(x)
+        print(x.shape)
+        # x = self.model.stages(x)
+        feats = [x]
+        for m in self.model.stages:
+            x = m(x)
+            print(x.shape)
+            feats.append(x)
+
+        x = self.model.final_conv(x)
+        features = self.model.final_act(x)
+
         return output
 
 model = ECANFNET()

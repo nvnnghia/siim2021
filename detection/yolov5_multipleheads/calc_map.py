@@ -108,22 +108,9 @@ def map_calc(det_path, gt_path, output_filename):
     if not os.path.exists(TEMP_FILES_PATH): # if it doesn't exist already
         os.makedirs(TEMP_FILES_PATH)
 
-    """
-        load detection result
-    """
-    with open(det_path) as f:
-        lines = f.readlines()
-    det_data = {}
-    for line in lines:
-        frame, class_name, x1, y1, x2, y2, score = line.strip().split(' ')
-        if frame not in det_data.keys():
-            det_data[frame] = []
-        bbox = x1 + " " + y1 + " " + x2 + " " +y2
-        det_data[frame].append({"class_name":class_name, "bbox":bbox, "confidence":score})
-
 
     """
-        load gt result
+        load gt result 
     """
     with open(gt_path) as f:
         lines = f.readlines()
@@ -134,6 +121,26 @@ def map_calc(det_path, gt_path, output_filename):
             gt_data[frame] = []
         bbox = x1 + " " + y1 + " " + x2 + " " +y2
         gt_data[frame].append({"class_name":class_name, "bbox":bbox, "used":False})
+
+
+    """
+        load detection result
+    """
+    with open(det_path) as f:
+        lines = f.readlines()
+    det_data = {}
+    for line in lines:
+        frame, class_name, x1, y1, x2, y2, score = line.strip().split(' ')
+        if frame not in gt_data.keys():
+            continue
+        if frame not in det_data.keys():
+            det_data[frame] = []
+        bbox = x1 + " " + y1 + " " + x2 + " " +y2
+        det_data[frame].append({"class_name":class_name, "bbox":bbox, "confidence":score})
+
+    print(len(det_data.keys()), len(gt_data.keys()))
+
+
 
     for frame in det_data.keys():
         if frame not in gt_data.keys():
@@ -272,7 +279,7 @@ def map_calc(det_path, gt_path, output_filename):
                         status = "INSUFFICIENT OVERLAP"
 
             #print(tp)
-            # compute precision/recall
+            # compute precision/recall 
             cumsum = 0
             for idx, val in enumerate(fp):
                 fp[idx] += cumsum
@@ -323,11 +330,12 @@ def map_calc(det_path, gt_path, output_filename):
 
 if __name__ == '__main__':
     MINOVERLAP = 0.5 # default IOU value 
-    # gt_path = '../data/val_gt_s42_f0.txt'
+    # gt_path = '../data/val_gt_s42_f4.txt' 
     gt_path = '../data/val_gt_s42_all.txt'
     # det_path = 'outputs/val/runs_384cf1_cls1_x_f0_exp_weights_best_hflip0.txt'
     det_path = 'test_v5neg_2a.txt'
-    # det_path = '../efficientDet/outputs/val_txt/weights_effdet0_fold4_best_checkpoint_044epoch.txt'
+    # det_path = 'moreoof/det_oof.txt'
+    # det_path = '/home/pintel/nvnn/code/YOLOX/outputs/val/yolox_siim_d_f4.txt'
     output_filename = 'map.txt'
     map_calc(det_path=det_path, gt_path=gt_path, output_filename=output_filename)
 

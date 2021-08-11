@@ -15,12 +15,11 @@ import torch.nn.functional as F
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--is_val', default=1, help='is_eval')
-parser.add_argument('--is_wbf2', default=0, help='is_wbf2')
 parser.add_argument('--input_path', default='../../data/png512/test/*.png', help='is_wbf2')
 parser.add_argument('--output_path', default='outputs/test/', help='is_wbf2')
 parser.add_argument('--weight_path', default='0', help='is_wbf2')
 parser.add_argument('--hflip', default=0, help='is_wbf2')
-parser.add_argument('--input_size', default=640, help='is_wbf2')
+parser.add_argument('--input_size', default=384, help='is_wbf2')
 
 args = parser.parse_args()
 
@@ -57,7 +56,6 @@ class TestDataset(Dataset):
 
 if __name__ =="__main__":
     is_val = int(args.is_val)
-    is_wbf2 = int(args.is_wbf2)
 
     weights = [
             # # best
@@ -80,24 +78,24 @@ if __name__ =="__main__":
             # 'runs/cf1_cls1_l_f3/exp/weights/best.pt',
             # 'runs/cf1_cls1_l_f4/exp/weights/best.pt',
 
-            # # 'runs/cf1_cls1_x_f0/exp/weights/best.pt',
+            # 'runs/cf1_cls1_x_f0/exp/weights/best.pt',
             # 'runs/cf1_cls1_x_f1/exp/weights/best.pt',
             # 'runs/cf1_cls1_x_f2/exp/weights/best.pt',
             # 'runs/cf1_cls1_x_f3/exp/weights/best.pt',
-            # # 'runs/cf1_cls1_x_f4/exp/weights/last.pt',
+            # 'runs/cf1_cls1_x_f4/exp/weights/last.pt',
 
 
-            'runs/384cf1_cls1_f0/exp/weights/best.pt',
-            'runs/384cf1_cls1_f1/exp/weights/best.pt',
-            'runs/384cf1_cls1_f2/exp/weights/best.pt',
-            'runs/384cf1_cls1_f3/exp/weights/best.pt',
-            'runs/384cf1_cls1_f4/exp/weights/best.pt',
+            # 'runs/384cf1_cls1_f0/exp/weights/best.pt',
+            # 'runs/384cf1_cls1_f1/exp/weights/best.pt',
+            # 'runs/384cf1_cls1_f2/exp/weights/best.pt',
+            # 'runs/384cf1_cls1_f3/exp/weights/best.pt',
+            # 'runs/384cf1_cls1_f4/exp/weights/best.pt',
 
-            'runs/384cf1_cls1_l_f0/exp/weights/best.pt',
-            'runs/384cf1_cls1_l_f1/exp/weights/best.pt',
-            'runs/384cf1_cls1_l_f2/exp/weights/best.pt',
-            'runs/384cf1_cls1_l_f3/exp/weights/best.pt',
-            'runs/384cf1_cls1_l_f4/exp/weights/best.pt',
+            # 'runs/384cf1_cls1_l_f0/exp/weights/best.pt',
+            # 'runs/384cf1_cls1_l_f1/exp/weights/best.pt',
+            # 'runs/384cf1_cls1_l_f2/exp/weights/best.pt',
+            # 'runs/384cf1_cls1_l_f3/exp/weights/best.pt',
+            # 'runs/384cf1_cls1_l_f4/exp/weights/best.pt',
 
             'runs/384cf1_cls1_x_f0/exp/weights/best.pt',
             'runs/384cf1_cls1_x_f1/exp/weights/best.pt',
@@ -117,68 +115,70 @@ if __name__ =="__main__":
             'runs/384cf1_res50_f3/exp/weights/best.pt',
             'runs/384cf1_res50_f4/exp/weights/best.pt',
 
-            'runs/384cf1_nfnet_f0/exp/weights/best.pt',
-            'runs/384cf1_nfnet_f1/exp/weights/best.pt',
-            'runs/384cf1_nfnet_f2/exp/weights/best.pt',
-            'runs/384cf1_nfnet_f3/exp/weights/best.pt',
-            'runs/384cf1_nfnet_f4/exp/weights/best.pt',
+            # 'runs/384cf1_nfnet_f0/exp/weights/best.pt',
+            # 'runs/384cf1_nfnet_f1/exp/weights/best.pt',
+            # 'runs/384cf1_nfnet_f2/exp/weights/best.pt',
+            # 'runs/384cf1_nfnet_f3/exp/weights/best.pt',
+            # 'runs/384cf1_nfnet_f4/exp/weights/best.pt',
 
-            'runs/384cf1_b5_f0/exp/weights/best.pt',
-            'runs/384cf1_b5_f1/exp/weights/best.pt',
-            'runs/384cf1_b5_f2/exp/weights/best.pt',
-            'runs/384cf1_b5_f3/exp/weights/best.pt',
-            'runs/384cf1_b5_f4/exp/weights/best.pt',
+            # 'runs/384cf1_b5_f0/exp/weights/best.pt',
+            # 'runs/384cf1_b5_f1/exp/weights/best.pt',
+            # 'runs/384cf1_b5_f2/exp/weights/best.pt',
+            # 'runs/384cf1_b5_f3/exp/weights/best.pt',
+            # 'runs/384cf1_b5_f4/exp/weights/best.pt',
 
 
-            # '../yolov5_heatmap/runs/hmcf1_cls1_f0/exp/weights/best.pt',
-            # '../yolov5_heatmap/runs/hmcf1_cls1_f1/exp/weights/best.pt',
-            # '../yolov5_heatmap/runs/hmcf1_cls1_f2/exp/weights/best.pt',
-            # '../yolov5_heatmap/runs/hmcf1_cls1_f3/exp/weights/best.pt',
-            # '../yolov5_heatmap/runs/hmcf1_cls1_f4/exp/weights/best.pt',
-            
+            # 'runs/384cf1_l0_f0/exp/weights/best.pt',
+            # 'runs/384cf1_l0_f1/exp/weights/best.pt',
+            # 'runs/384cf1_l0_f2/exp/weights/best.pt',
+            # 'runs/384cf1_l0_f3/exp/weights/best.pt',
+            # 'runs/384cf1_l0_f4/exp/weights/best.pt',
 
-            # # '../yolov5_heatmap/runs/cf1_cls1_f1/exp/weights/last.pt',
-            # # '../yolov5_heatmap/runs/cf1_cls1_f2/exp/weights/last.pt',
-            # # '../yolov5_heatmap/runs/cf1_cls1_f3/exp/weights/last.pt',
-            # # '../yolov5_heatmap/runs/cf1_cls1_f4/exp/weights/last.pt',
-            # # '../yolov5_heatmap/runs/cf1_cls1_f0/exp/weights/last.pt',
-            
+            # 'runs/384cf1_l2_f0/exp/weights/best.pt',
+            # 'runs/384cf1_l2_f1/exp/weights/best.pt',
+            # 'runs/384cf1_l2_f2/exp/weights/best.pt',
+            # 'runs/384cf1_l2_f3/exp/weights/best.pt',
+            # 'runs/384cf1_l2_f4/exp/weights/best.pt',
 
-            # # '../yolov5_heatmap/runs/cf1_cls1_m_f0/exp2/weights/best.pt',
-            # # '../yolov5_heatmap/runs/cf1_cls1_m_f1/exp2/weights/best.pt',
-            # # '../yolov5_heatmap/runs/cf1_cls1_m_f2/exp/weights/best.pt',
-            # # '../yolov5_heatmap/runs/cf1_cls1_m_f3/exp/weights/best.pt',
-            # # '../yolov5_heatmap/runs/cf1_cls1_m_f4/exp/weights/best.pt',
+            'runs/384cf1_r101_f0/exp/weights/best.pt',
+            'runs/384cf1_r101_f1/exp/weights/best.pt',
+            'runs/384cf1_r101_f2/exp/weights/best.pt',
+            'runs/384cf1_r101_f3/exp/weights/best.pt',
+            'runs/384cf1_r101_f4/exp/weights/best.pt',
 
-            # '../yolov5_heatmap/runs/hmcf1_cls1_l_f0/exp/weights/best.pt',
-            # '../yolov5_heatmap/runs/hmcf1_cls1_l_f1/exp/weights/best.pt',
-            # '../yolov5_heatmap/runs/hmcf1_cls1_l_f2/exp/weights/best.pt',
-            # '../yolov5_heatmap/runs/hmcf1_cls1_l_f3/exp/weights/best.pt',
-            # '../yolov5_heatmap/runs/hmcf1_cls1_l_f4/exp/weights/best.pt',
+            # 'runs/384cf1_r152_f0/exp/weights/best.pt',
+            # 'runs/384cf1_r152_f1/exp/weights/best.pt',
+            # 'runs/384cf1_r152_f2/exp/weights/best.pt',
+            # 'runs/384cf1_r152_f3/exp/weights/best.pt',
+            # 'runs/384cf1_r152_f4/exp/weights/best.pt',
 
-            # # '../yolov5_heatmap/runs/cf1_cls1_x_f0/exp/weights/best.pt',
-            # # '../yolov5_heatmap/runs/cf1_cls1_x_f1/exp/weights/best.pt',
-            # # '../yolov5_heatmap/runs/cf1_cls1_x_f2/exp/weights/best.pt',
+            # 'runs/384cf1_r34_f0/exp/weights/best.pt',
+            # 'runs/384cf1_r34_f1/exp/weights/best.pt',
+            # 'runs/384cf1_r34_f2/exp/weights/best.pt',
+            # 'runs/384cf1_r34_f3/exp/weights/best.pt',
+            # 'runs/384cf1_r34_f4/exp/weights/best.pt',
 
-            # '../yolov5_heatmap/runs/384cf1_cls1_f0/exp/weights/best.pt',
-            # '../yolov5_heatmap/runs/384cf1_cls1_f1/exp/weights/best.pt',
-            # '../yolov5_heatmap/runs/384cf1_cls1_f2/exp/weights/best.pt',
-            # '../yolov5_heatmap/runs/384cf1_cls1_f3/exp/weights/best.pt',
-            # '../yolov5_heatmap/runs/384cf1_cls1_f4/exp/weights/best.pt',
+            # 'runs/384cf1_l1_f0/exp/weights/best.pt',
+            # 'runs/384cf1_l1_f1/exp/weights/best.pt',
+            # 'runs/384cf1_l1_f2/exp/weights/best.pt',
+            # 'runs/384cf1_l1_f3/exp/weights/best.pt',
+            # 'runs/384cf1_l1_f4/exp/weights/best.pt',
 
-            # '../yolov5_heatmap/runs/384cf1_cls1_x_f0/exp/weights/best.pt',
-            # '../yolov5_heatmap/runs/384cf1_cls1_x_f1/exp/weights/best.pt',
-            # '../yolov5_heatmap/runs/384cf1_cls1_x_f2/exp/weights/best.pt',
-            # '../yolov5_heatmap/runs/384cf1_cls1_x_f3/exp/weights/best.pt',
-            # '../yolov5_heatmap/runs/384cf1_cls1_x_f4/exp/weights/best.pt',
+            'runs/384cf1_l0_f0/exp/weights/best.pt',
+            'runs/384cf1_l0_f1/exp/weights/best.pt',
+            'runs/384cf1_l0_f2/exp/weights/best.pt',
+            'runs/384cf1_l0_f3/exp/weights/best.pt',
+            'runs/384cf1_l0_f4/exp/weights/best.pt',
 
-            # '../yolov5_heatmap/runs/384cf1_cls1_m_f0/exp/weights/best.pt',
-            # '../yolov5_heatmap/runs/384cf1_cls1_m_f1/exp/weights/best.pt',
-            # '../yolov5_heatmap/runs/384cf1_cls1_m_f2/exp/weights/best.pt',
-            # '../yolov5_heatmap/runs/384cf1_cls1_m_f3/exp/weights/best.pt',
-            # '../yolov5_heatmap/runs/384cf1_cls1_m_f4/exp/weights/best.pt',
+            # 'runs/384cf1_cls1_cm_f0/exp/weights/best.pt',
+            # 'runs/384cf1_cls1_cm_f1/exp/weights/best.pt',
+            # 'runs/384cf1_cls1_cm_f2/exp/weights/best.pt',
+            # 'runs/384cf1_cls1_cm_f3/exp/weights/best.pt',
+            # 'runs/384cf1_cls1_cm_f4/exp/weights/best.pt',
 
             ]
+
+    # weights = glob('runs/*/exp/weights/best.pt')
 
     if len(args.weight_path) > 10:
         weights = glob(args.weight_path)
@@ -191,24 +191,16 @@ if __name__ =="__main__":
 
 
     for w in tqdm(weights):
-        if os.path.isfile(w):
-            pass
-        else:
-            print(w)
+        assert os.path.isfile(w), f'{w} does not exist!'
+
     if is_val:
         num_classes = 1
-        if is_wbf2:
-            outdir = 'outputs/val_txt_wbf2/'
-        else:
-            outdir = 'outputs/val/'
+        outdir = 'outputs/val/'
     else:
         image_list = glob(args.input_path)
-        label_list=None
-        if is_wbf2:
-            outdir = 'outputs/test_txt_005_wbf2/'
-        else:
-            outdir = args.output_path
+        outdir = args.output_path
 
+    os.makedirs(str(outdir), exist_ok=True)
     if is_val:
         fold = int(weights[0].split('/')[-4][-1])
         image_list, label_list = get_data(f'../data/val_f{fold}_s42_cls1.txt')
@@ -247,7 +239,7 @@ if __name__ =="__main__":
                 has_box_scores = F.sigmoid(logits).cpu().detach().numpy()
                 # print(has_box_scores)
 
-                pred = non_max_suppression(pred, conf_thres = 0.001, iou_thres = 0.5)
+                pred = non_max_suppression(pred, conf_thres = 0.0001, iou_thres = 0.5)
 
                 with open(outname, 'a') as f:
                     for i, (det,s) in enumerate(zip(pred,has_box_scores)):  # detections per image

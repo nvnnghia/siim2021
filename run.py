@@ -13,14 +13,19 @@ import time
 # 	if len(out_str.split('\n'))< 4:
 # 		break
 
-# 	time.sleep(50)
+# time.sleep(4*3600)
 
-os.system(f'CUDA_VISIBLE_DEVICES=1 python main.py -C n_cf29 -S 3')
-os.system(f'CUDA_VISIBLE_DEVICES=1 python main.py -C n_cf28 -S 3')
+# os.system(f'CUDA_VISIBLE_DEVICES=1 python main.py -C n_cf11_3 -S 3')
+# os.system(f'CUDA_VISIBLE_DEVICES=1 python main.py -C n_cf28 -S 3')
 
-# for i in range(0,5):
-# 	os.system(f'CUDA_VISIBLE_DEVICES=1 python main.py -C n_cf25 -S {i}')
-# 	os.system(f'CUDA_VISIBLE_DEVICES=1 python main.py -C n_cf25 -S {i} -M val')
+# for i in range(1,3):
+# 	os.system(f'CUDA_VISIBLE_DEVICES=1 python main.py -C n_cf11_h1 -S {i}')
+# 	os.system(f'CUDA_VISIBLE_DEVICES=1 python main.py -C n_cf11_h1 -S {i} -M val')
+
+
+for i in range(0,5):
+	os.system(f'CUDA_VISIBLE_DEVICES=1 python main.py -C n_cf11_h2 -S {i}')
+	os.system(f'CUDA_VISIBLE_DEVICES=1 python main.py -C n_cf11_h2 -S {i} -M val')
 
 # for i in range(0,5):
 # 	os.system(f'CUDA_VISIBLE_DEVICES=0 python main.py -C n_cf2_1 -S {i}')

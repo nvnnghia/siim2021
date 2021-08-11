@@ -4,7 +4,6 @@ import os
 import sys
 import random
 import cv2
-import neptune
 import numpy as np
 import pandas as pd
 import torch
@@ -25,8 +24,12 @@ from transformers import get_cosine_schedule_with_warmup, get_linear_schedule_wi
 from torch.utils.data import Sampler,RandomSampler,SequentialSampler
 from utils.parallel import DataParallelModel, DataParallelCriterion
 import time 
-import neptune
-from ranger21 import Ranger21
+try:
+    import neptune
+    from ranger21 import Ranger21
+except:
+    pass
+
 from shutil import copyfile
 from tqdm import tqdm
 from warnings import filterwarnings
@@ -56,7 +59,7 @@ def sigmoid_rampup(current, rampup_length=15):
         return 0.9*float(np.exp(-5.0 * phase * phase))
 
 def get_model(cfg):
-    model = SIIMModel(model_name=cfg.model_architecture, pretrained=True, pool=cfg.pool, out_dim=cfg.output_size, dropout = cfg.dropout)
+    model = SIIMModel(model_name=cfg.model_architecture, pretrained=False, pool=cfg.pool, out_dim=cfg.output_size, dropout = cfg.dropout)
     return model
 
 def logfile(message):
@@ -131,6 +134,43 @@ def get_scheduler(cfg, optimizer, total_steps):
 
     return scheduler
 
+# DualTransform Cutout
+from albumentations.core.transforms_interface import ImageOnlyTransform, DualTransform
+import albumentations.augmentations.functional as F
+import random
+def cutoutv2(img, holes, fill_value=0):
+    res = img.copy()
+    for x1, y1, x2, y2 in holes:
+        res[y1:y2, x1:x2] = fill_value
+    return res
+class CutoutV2(DualTransform):
+    def __init__(self, num_holes=8, max_h_size=8, max_w_size=8, fill_value=0, always_apply=False, p=0.5):
+        super(CutoutV2, self).__init__(always_apply, p)
+        self.num_holes = num_holes
+        self.max_h_size = max_h_size
+        self.max_w_size = max_w_size
+        self.fill_value = fill_value
+    def apply(self, image, fill_value=0, holes=[], **params):
+        return cutoutv2(image, holes, fill_value)
+    def get_params_dependent_on_targets(self, params):
+        img = params['image']
+        height, width = img.shape[:2]
+        holes = []
+        for n in range(self.num_holes):
+            y = random.randint(0, height)
+            x = random.randint(0, width)
+            y1 = np.clip(y - self.max_h_size // 2, 0, height)
+            y2 = np.clip(y + self.max_h_size // 2, 0, height)
+            x1 = np.clip(x - self.max_w_size // 2, 0, width)
+            x2 = np.clip(x + self.max_w_size // 2, 0, width)
+            holes.append((x1, y1, x2, y2))
+        return {'holes': holes}
+    @property
+    def targets_as_params(self):
+        return ['image']
+    def get_transform_init_args_names(self):
+        return ('num_holes', 'max_h_size', 'max_w_size')
+
 def get_dataloader(cfg, fold_id):
     if cfg.augmentation:
         print("[ √ ] Using augmentation file", f'configs/aug/{cfg.augmentation}')
@@ -139,14 +179,30 @@ def get_dataloader(cfg, fold_id):
         else:
             transforms_train = albumentations.load(f'configs/aug/{cfg.augmentation}', data_format='json')
     else:
+        # transforms_train = albumentations.Compose([
+        #     albumentations.Resize(cfg.input_size, cfg.input_size),
+        #     albumentations.HorizontalFlip(p=0.5),
+        #     albumentations.ShiftScaleRotate(p=0.7, shift_limit=0.0625, scale_limit=0.2, rotate_limit=20),
+        #     albumentations.Cutout(p=0.5, max_h_size=16, max_w_size=16, fill_value=(0., 0., 0.), num_holes=16),
+        #     # albumentations.Normalize(),
+        # ])
+
         transforms_train = albumentations.Compose([
             albumentations.Resize(cfg.input_size, cfg.input_size),
+        #     albumentations.Transpose(p=0.5),
+        #     albumentations.VerticalFlip(p=0.5),
             albumentations.HorizontalFlip(p=0.5),
-            albumentations.ShiftScaleRotate(p=0.7, shift_limit=0.0625, scale_limit=0.2, rotate_limit=20),
-            albumentations.Cutout(p=0.5, max_h_size=16, max_w_size=16, fill_value=(0., 0., 0.), num_holes=16),
-            # albumentations.Normalize(),
+            albumentations.RandomBrightness(limit=0.2, p=0.75),
+            albumentations.RandomContrast(limit=0.2, p=0.75),
+            albumentations.OneOf([
+                albumentations.OpticalDistortion(distort_limit=1.),
+                albumentations.GridDistortion(num_steps=5, distort_limit=1.),
+            ], p=0.75),
+            albumentations.HueSaturationValue(hue_shift_limit=40, sat_shift_limit=40, val_shift_limit=0, p=0.75),
+            albumentations.ShiftScaleRotate(shift_limit=0.2, scale_limit=0.3, rotate_limit=30, border_mode=0, p=0.75),
+            CutoutV2(max_h_size=int(cfg.input_size * 0.4), max_w_size=int(cfg.input_size * 0.4), num_holes=1, p=0.75),
         ])
-
+        
     transforms_valid = albumentations.Compose([
         albumentations.Resize(cfg.input_size, cfg.input_size),
         # albumentations.Normalize()
@@ -155,7 +211,10 @@ def get_dataloader(cfg, fold_id):
     if cfg.stage > 0:
         df = pd.read_csv(f'{cfg.out_dir}/oofs{cfg.stage-1}.csv')
     else:
-        df = pd.read_csv(cfg.train_csv_path)
+        if cfg.is_kg:
+            df = pd.read_csv(cfg.train_csv_path.split('/')[-1])
+        else:
+            df = pd.read_csv(cfg.train_csv_path)
     train_df = df[df['fold'] != fold_id]
     val_df = df[df['fold'] == fold_id]
 
@@ -166,19 +225,32 @@ def get_dataloader(cfg, fold_id):
         val_df = df
 
     if cfg.mode in ['test']:
-        df = pd.read_csv('data/test_meta.csv')
+        if cfg.is_kg:
+            df = pd.read_csv('test_meta.csv')
+        else:
+            df = pd.read_csv('data/test_meta.csv')
+            # df = pd.read_csv('data/train_split_seed42_haff1.csv')
+
         val_df = df
 
     if cfg.mode in ['predict']:
-        # df = pd.read_csv('data/edata_all1.csv')
-        df = pd.read_csv('data/padchest512.csv')
+        df = pd.read_csv('data/external.csv')
+        # df = pd.read_csv('data/padchest512.csv')
         # df = pd.read_csv('data/edata_bimcvrecord.csv')
         val_df = df
 
     if cfg.use_edata and cfg.mode not in ['test']:
-        e_df = pd.read_csv('outputs/n_cf11/n_cf11_predict_st2_all1.csv')
-        # e_df = pd.read_csv('outputs/n_cf11/n_cf11_predict_st2_bmr.csv')
-        e_df = e_df[e_df['fold'] != fold_id]
+        if cfg.is_kg:
+            # e_df = pd.read_csv(f'{cfg.out_dir}/{cfg.name}_{cfg.mode}_st{cfg.stage}.csv')
+            e_df = pd.read_csv(f'pseudo.csv')
+        else:
+            e_df = pd.read_csv('outputs/n_cf11/n_cf11_predict_st2_all1.csv')
+            # e_df = pd.read_csv('outputs/n_cf19_lbsm/n_cf19_lbsm_predict_st3.csv')
+            # e_df = pd.read_csv('outputs/n_cf11_3/n_cf11_3_predict_st3.csv')
+            # e_df = pd.read_csv('edata_train.csv')
+            # e_df = e_df[e_df['fold'] != fold_id]
+            # e_df = pd.read_csv(f'{cfg.pl_dir}/pseudo_st0_fold{fold_id}.csv')
+            
         e_dataset = SIIMDataset(e_df, tfms=transforms_train, cfg=cfg, mode='edata')
         e_loader = DataLoader(e_dataset, batch_size=cfg.batch_size, shuffle=True,  num_workers=8, pin_memory=True)
     else:
@@ -258,7 +330,7 @@ def train_func(model, train_loader, scheduler, device, epoch, tr_it):
             predictions = model(images.to(device))
 
 
-        if cfg.model in ['model_2_1']:
+        if cfg.model in ['model_2_1', 'model_2_2', 'model_7']:
             prediction, prediction1 = predictions
         elif cfg.model in ['model_4_1', 'model_4_2']:
             prediction, prediction1, seg_out = predictions
@@ -272,19 +344,20 @@ def train_func(model, train_loader, scheduler, device, epoch, tr_it):
 
         if cfg.loss == 'ce':
             # loss = ce_criterion(prediction, targets1.to(device)) 
-            if cfg.model in ['model_2_1', 'model_4_1', 'model_4_2']:
+            if cfg.model in ['model_2_1', 'model_2_2', 'model_4_1', 'model_4_2', 'model_7']:
                 loss = 0.5*ce_criterion(prediction, targets1.long().to(device)) + 0.5*ce_criterion(prediction1, targets1.long().to(device))
             else:
                 loss = ce_criterion(prediction, targets.to(device))
         elif cfg.loss in ['bce', 'focal', 'ranger21']:
-            if cfg.model in ['model_2_1', 'model_4_1', 'model_4_2']:
-                loss = 0.5*criterion(prediction, targets.to(device)) + 0.5*criterion(prediction1, targets.to(device))
+            if cfg.model in ['model_2_1', 'model_2_2', 'model_4_1', 'model_4_2', 'model_7']:
+                # print(prediction.shape, prediction1.shape, targets.shape)
+                loss = 0.75*criterion(prediction, targets.to(device)) + 0.25*criterion(prediction1, targets.to(device))
             else:
                 loss = criterion(prediction, targets.to(device))
         elif cfg.loss in ['roc']:
             whole_y_pred = np.append(whole_y_pred, prediction.clone().detach().cpu().numpy())
             whole_y_t    = np.append(whole_y_t, targets.clone().detach().cpu().numpy())
-            if cfg.model in ['model_2_1', 'model_4_1', 'model_4_2']:
+            if cfg.model in ['model_2_1', 'model_2_2', 'model_4_1', 'model_4_2', 'model_7']:
                 loss = 0.5*roc_criterion(prediction, targets.to(device), epoch) + 0.5*roc_criterion1(prediction1, targets.to(device), epoch)
                 whole_y_pred1 = np.append(whole_y_pred1, prediction1.clone().detach().cpu().numpy())
             else:
@@ -294,7 +367,7 @@ def train_func(model, train_loader, scheduler, device, epoch, tr_it):
 
         if cfg.stage>0:
             # loss += 0.5*criterion(prediction, oof_targets.to(device))
-            if cfg.model in ['model_2_1', 'model_4_1', 'model_4_2']:
+            if cfg.model in ['model_2_1', 'model_2_2', 'model_4_1', 'model_4_2', 'model_7']:
                 stage_loss = 0.5*criterion(prediction, oof_targets.float().to(device)) + 0.5*criterion(prediction1, oof_targets.float().to(device))
             else:
                 stage_loss = criterion(prediction, oof_targets.float().to(device))
@@ -345,7 +418,7 @@ def train_func(model, train_loader, scheduler, device, epoch, tr_it):
         last_whole_y_t = torch.tensor(whole_y_t).cuda()
         last_whole_y_pred = torch.tensor(whole_y_pred).cuda()
         roc_criterion.update(last_whole_y_t, last_whole_y_pred, epoch)
-        if cfg.model in ['model_2_1', 'model_4_1', 'model_4_2']:
+        if cfg.model in ['model_2_1', 'model_4_1', 'model_4_2', 'model_7']:
             last_whole_y_pred1 = torch.tensor(whole_y_pred1).cuda()
             roc_criterion1.update(last_whole_y_t, last_whole_y_pred1, epoch)
 
@@ -381,7 +454,7 @@ def valid_func(model, valid_loader):
 
             predictions = model(images)
 
-            if cfg.model in ['model_2_1']:
+            if cfg.model in ['model_2_1', 'model_2_2', 'model_7']:
                 logits, prediction1 = predictions
             elif cfg.model in ['model_4_1', 'model_4_2']:
                 logits, prediction1, seg_out = predictions
@@ -392,44 +465,44 @@ def valid_func(model, valid_loader):
 
             if cfg.loss == 'ce':
                 # loss = ce_criterion(logits, targets1.to(device)) 
-                if cfg.model in ['model_2_1', 'model_4_1', 'model_4_2']:
+                if cfg.model in ['model_2_1', 'model_2_2', 'model_4_1', 'model_4_2', 'model_7']:
                     loss = ce_criterion(logits[:sz], targets1.to(device)) + ce_criterion(prediction1[:sz], targets1.to(device))
                 else:
                     loss = ce_criterion(logits, targets1.to(device))
             elif cfg.loss in ['bce', 'focal', 'ranger21', 'roc']:
-                if cfg.model in ['model_2_1', 'model_4_1', 'model_4_2']:
+                if cfg.model in ['model_2_1', 'model_2_2', 'model_4_1', 'model_4_2', 'model_7']:
                     loss = criterion(logits[:sz], targets) + criterion(prediction1[:sz], targets)
                 else:
                     loss = criterion(logits[:sz], targets)
             else:
                 loss = 0.2*ce_criterion(prediction1, targets1.to(device)) + 0.5*criterion(logits, targets)
 
-            if cfg.model in ['model_2']: #use bceloss
+            if cfg.model in ['model_2']: #use bceloss 
                 prediction = logits
             else:
                 if cfg.loss in ['bce', 'focal', 'ranger21', 'roc']:
-                    if cfg.model in ['model_2_1', 'model_4_1', 'model_4_2']:
+                    if cfg.model in ['model_2_1', 'model_2_2', 'model_4_1', 'model_4_2', 'model_7']:
                         if flip:
-                            prediction = F.sigmoid(logits)/2 + F.sigmoid(prediction1)/2
+                            prediction = 0.75*torch.sigmoid(logits) + 0.0*torch.sigmoid(prediction1)
                             prediction = (prediction[:sz] + prediction[sz:]) / 2
                         else:
-                            prediction = F.sigmoid(logits)/2 + F.sigmoid(prediction1)/2
+                            prediction = 0.75*torch.sigmoid(logits) + 0.0*torch.sigmoid(prediction1)
                     else:
-                        prediction = F.sigmoid(logits)
+                        prediction = torch.sigmoid(logits)
                         if flip:
                             prediction = (prediction[:sz] + prediction[sz:]) / 2
                 elif cfg.loss == 'ce':
                     # prediction = F.softmax(logits)
-                    if cfg.model in ['model_2_1', 'model_4_1', 'model_4_2']:
+                    if cfg.model in ['model_2_1', 'model_2_2', 'model_4_1', 'model_4_2', 'model_7']:
                         if flip:
-                            prediction = F.softmax(logits)/2 + F.softmax(prediction1)/2
+                            prediction = torch.softmax(logits)/2 + torch.softmax(prediction1)/2
                             prediction = (prediction[:sz] + prediction[sz:]) / 2
                         else:
-                            prediction = F.softmax(logits)/2 + F.softmax(prediction1)/2
+                            prediction = torch.softmax(logits)/2 + torch.softmax(prediction1)/2
                     else:
-                        prediction = F.softmax(logits)/2 + F.softmax(prediction1)/2
+                        prediction = torch.softmax(logits)/2 + torch.softmax(prediction1)/2
                 else:
-                    prediction = 0.5*F.sigmoid(logits) + 0.5*F.softmax(logits1)
+                    prediction = 0.5*torch.sigmoid(logits) + 0.5*torch.softmax(logits1)
 
             proba = prediction.detach().cpu().numpy()
 
@@ -487,8 +560,8 @@ def valid_func(model, valid_loader):
 
     return loss_valid, micro_score, acc, auc, map, pred_probs
 
-def test_func(model, valid_loader):
-    model.eval()
+def test_func(models, valid_loader):
+    # model.eval()
     bar = tqdm(valid_loader)
 
     pred_probs = []
@@ -506,37 +579,44 @@ def test_func(model, valid_loader):
                 images = torch.stack([images,images.flip(-1)],0) # hflip
                 images = images.view(-1, 3, images.shape[-1], images.shape[-1])
 
-            predictions = model(images)
+            probs = 0.
+            for cc, model in enumerate(models):
+                predictions = model(images)
 
-            if cfg.model in ['model_2_1']:
-                logits, prediction1 = predictions
-            elif cfg.model in ['model_4_1', 'model_4_2']:
-                logits, prediction1, seg_out = predictions
-            elif cfg.model in ['model_4']:
-                logits, seg_out = predictions
-            else:
-                logits = predictions
-
-
-            if cfg.model in ['model_2']: #use bceloss
-                prediction = logits
-            else:
-                if cfg.loss in ['bce', 'focal']:
-                    if cfg.model in ['model_2_1', 'model_4_1', 'model_4_2']:
-                        prediction = F.sigmoid(logits)/2 + F.sigmoid(prediction1)/2
-                        if flip:
-                            prediction = (prediction[:sz] + prediction[sz:]) / 2
-                    else:
-                        prediction = F.sigmoid(logits)
-                        if flip:
-                            prediction = (prediction[:sz] + prediction[sz:]) / 2
-                elif cfg.loss == 'ce':
-                    prediction = F.softmax(logits)
+                if cfg.model in ['model_2_1', 'model_2_2', 'model_7']:
+                    logits, prediction1 = predictions
+                elif cfg.model in ['model_4_1', 'model_4_2']:
+                    logits, prediction1, seg_out = predictions
+                elif cfg.model in ['model_4']:
+                    logits, seg_out = predictions
                 else:
-                    prediction = 0.5*F.sigmoid(logits) + 0.5*F.softmax(logits1)
+                    logits = predictions
 
-            proba = prediction.detach().cpu().numpy()
 
+                if cfg.model in ['model_2']: #use bceloss
+                    prediction = logits
+                else:
+                    if cfg.loss in ['bce', 'focal']:
+                        if cfg.model in ['model_2_1', 'model_2_2', 'model_4_1', 'model_4_2', 'model_7']:
+                            prediction = 0.75*torch.sigmoid(logits) + 0.0*torch.sigmoid(prediction1)
+                            if flip:
+                                prediction = (prediction[:sz] + prediction[sz:]) / 2
+                        else:
+                            prediction = torch.sigmoid(logits)
+                            if flip:
+                                prediction = (prediction[:sz] + prediction[sz:]) / 2
+                    elif cfg.loss == 'ce':
+                        prediction = torch.softmax(logits)
+                    else:
+                        prediction = 0.5*torch.sigmoid(logits) + 0.5*torch.softmax(logits1)
+
+                proba = prediction.detach().cpu().numpy()
+                if cc == 0:
+                    probs = proba
+                else:
+                    probs += proba
+
+            probs /= len(models)
             pred_probs.append(proba)
 
             if batch_idx>30 and cfg.debug:
@@ -553,246 +633,264 @@ def intersect_dicts(da, db, exclude=()):
 if __name__ == "__main__":
     set_seed(cfg["seed"])
 
+    if os.path.isfile('../input/siim-covid19-detection/sample_submission.csv'):
+        cfg.is_kg = True
+    else:
+        cfg.is_kg = False
+
     if cfg.model in ['model_4', 'model_4_1', 'model_4_2']:
         print("[ √ ] Using segmentation")
         cfg.use_seg = True
 
     device = "cuda"
 
-    copyfile(os.path.basename(__file__), os.path.join(cfg.out_dir, os.path.basename(__file__)))
+    if cfg.mode in ['train', 'val', 'predict']:
+        oofs = []
+        for cc, fold_id in enumerate(cfg.folds):
+            log_path = f'{cfg.out_dir}/log_f{fold_id}_st{cfg.stage}.txt'
+            train_loader, valid_loader, total_steps, val_df, e_loader = get_dataloader(cfg, fold_id)
+            total_steps = total_steps*cfg.epochs
+            print(f'======== FOLD {fold_id} ========')
+            if cfg.dp:
+            	model = torch.nn.DataParallel(model)
 
-    oofs = []
-    for cc, fold_id in enumerate(cfg.folds):
-        log_path = f'{cfg.out_dir}/log_f{fold_id}_st{cfg.stage}.txt'
-        train_loader, valid_loader, total_steps, val_df, e_loader = get_dataloader(cfg, fold_id)
-        total_steps = total_steps*cfg.epochs
-        print(f'======== FOLD {fold_id} ========')
-        if cfg.dp:
-        	model = torch.nn.DataParallel(model)
+            if cfg.mode == 'train':
+                copyfile(os.path.basename(__file__), os.path.join(cfg.out_dir, os.path.basename(__file__)))
+                logfile(f'======= STAGE {cfg.stage} =========')
+                model = get_model(cfg).to(device)
+                optimizer = get_optimizer(cfg, model)
+                scheduler = get_scheduler(cfg, optimizer, total_steps)
 
-        if cfg.mode == 'train':
-            logfile(f'======= STAGE {cfg.stage} =========')
-            model = get_model(cfg).to(device)
-            optimizer = get_optimizer(cfg, model)
-            scheduler = get_scheduler(cfg, optimizer, total_steps)
-
-            if cfg["mixed_precision"]:
-                scaler = GradScaler()
-
-            if cfg.model in ['model_2']:
-                criterion = torch.nn.BCELoss()
-            else:
-                # criterion = torch.nn.BCEWithLogitsLoss(pos_weight = torch.as_tensor([1,1,3,2,1], dtype=torch.float).cuda())
-                criterion = torch.nn.BCEWithLogitsLoss()
-
-            # ce_criterion = torch.nn.CrossEntropyLoss()
-            if cfg.loss in ['ce', 'all']:
-                # ce_criterion = OnlineLabelSmoothing(alpha=0.5, n_classes=cfg.output_size, smoothing=0.1)
-                # ce_criterion.to(device)
-                ce_criterion = torch.nn.CrossEntropyLoss()
-            elif cfg.loss in ['focal']:
-                criterion = FocalLoss()
-            elif cfg.loss in ['roc']:
-                roc_criterion = ROCLoss()
-                roc_criterion1 = ROCLoss()
-
-            if cfg.use_seg:
-                # seg_criterion = torch.nn.MSELoss()
-                seg_criterion = torch.nn.BCEWithLogitsLoss()
-
-            if cfg.weight_file:
-                exclude = []  # exclude keys
-                if '.pth' in cfg.weight_file:
-                    weight_file = cfg.weight_file
-                else:
-                    weight_file = cfg.weight_file + f'best_map_fold{fold_id}_st0.pth'
-                state_dict = torch.load(weight_file, map_location=device)  # load checkpoint
-                if cfg.use_seg:
-                    state_dict = intersect_dicts(state_dict, model.model.state_dict(), exclude=exclude)  # intersect
-                    model.model.load_state_dict(state_dict, strict=False)  # load
-                    print('Transferred %g/%g items from %s' % (len(state_dict), len(model.model.state_dict()), weight_file))  # report
-                else:
-                    state_dict = intersect_dicts(state_dict, model.state_dict(), exclude=exclude)  # intersect
-                    model.load_state_dict(state_dict, strict=False)  # load
-                    print('Transferred %g/%g items from %s' % (len(state_dict), len(model.state_dict()), weight_file))  # report
-                del state_dict
-
-            if cfg.resume_training:
-                chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth'
-                checkpoint = torch.load(chpt_path, map_location="cpu")
-                model.load_state_dict(checkpoint["model"])
-                optimizer.load_state_dict(checkpoint["optimizer"])
                 if cfg["mixed_precision"]:
-                    scaler.load_state_dict(checkpoint["scaler"])
-                if scheduler is not None:
-                    scheduler.load_state_dict(checkpoint["scheduler"])
+                    scaler = GradScaler()
 
+                if cfg.model in ['model_2']:
+                    criterion = torch.nn.BCELoss()
+                else:
+                    # criterion = torch.nn.BCEWithLogitsLoss(pos_weight = torch.as_tensor([1,1,3,2,1], dtype=torch.float).cuda())
+                    criterion = torch.nn.BCEWithLogitsLoss()
+
+                # ce_criterion = torch.nn.CrossEntropyLoss()
+                if cfg.loss in ['ce', 'all']:
+                    # ce_criterion = OnlineLabelSmoothing(alpha=0.5, n_classes=cfg.output_size, smoothing=0.1)
+                    # ce_criterion.to(device)
+                    ce_criterion = torch.nn.CrossEntropyLoss()
+                elif cfg.loss in ['focal']:
+                    criterion = FocalLoss()
+                elif cfg.loss in ['roc']:
+                    roc_criterion = ROCLoss()
+                    roc_criterion1 = ROCLoss()
+
+                if cfg.use_seg:
+                    # seg_criterion = torch.nn.MSELoss()
+                    seg_criterion = torch.nn.BCEWithLogitsLoss()
+
+                if cfg.weight_file:
+                    exclude = []  # exclude keys
+                    if '.pth' in cfg.weight_file:
+                        weight_file = cfg.weight_file
+                    else:
+                        weight_file = cfg.weight_file + f'best_map_fold{fold_id}_st0.pth'
+                    state_dict = torch.load(weight_file, map_location=device)  # load checkpoint
+                    if cfg.use_seg:
+                        state_dict = intersect_dicts(state_dict, model.model.state_dict(), exclude=exclude)  # intersect
+                        model.model.load_state_dict(state_dict, strict=False)  # load
+                        print('Transferred %g/%g items from %s' % (len(state_dict), len(model.model.state_dict()), weight_file))  # report
+                    else:
+                        state_dict = intersect_dicts(state_dict, model.state_dict(), exclude=exclude)  # intersect
+                        model.load_state_dict(state_dict, strict=False)  # load
+                        print('Transferred %g/%g items from %s' % (len(state_dict), len(model.state_dict()), weight_file))  # report
+                    del state_dict
+
+                if cfg.resume_training:
+                    chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth'
+                    checkpoint = torch.load(chpt_path, map_location="cpu")
+                    model.load_state_dict(checkpoint["model"])
+                    optimizer.load_state_dict(checkpoint["optimizer"])
+                    if cfg["mixed_precision"]:
+                        scaler.load_state_dict(checkpoint["scaler"])
+                    if scheduler is not None:
+                        scheduler.load_state_dict(checkpoint["scheduler"])
+
+                    del checkpoint
+                    gc.collect()
+
+                if cfg.neptune_project:
+                    with open('resources/neptune_api.txt') as f:
+                        token = f.read().strip()
+                    neptune.init(cfg.neptune_project, api_token = token)
+                    neptune.create_experiment(name=cfg.name, params=cfg)
+                    neptune.append_tag(cfg.model_architecture)
+                    neptune.append_tag(f'fold {fold_id}')
+                    neptune.append_tag(f'use_seg {cfg.use_seg}')
+                    neptune.append_tag(f'{cfg.model}')
+
+                if cfg.use_edata:
+                    tr_it = iter(e_loader)
+                else:
+                    tr_it = None
+
+                loss_min = 1e6
+                map_score_max = 0
+                best_score = 0
+                for epoch in range(1, cfg.epochs+1):
+                    logfile(f'====epoch {epoch} ====')
+                    loss_train, tr_it = train_func(model, train_loader, scheduler, device, epoch, tr_it)
+                    loss_valid, micro_score, acc, auc, map, pred_probs = valid_func(model, valid_loader)
+                    if cfg.loss in ['ce', 'all']:
+                        ce_criterion.next_epoch()
+
+                    score = 0.4*acc + 0.4*map + 0.2*auc
+                    if score > best_score:
+                        logfile(f'best_score ({best_score:.6f} --> {score:.6f}). Saving model ...')
+                        if cfg.use_seg:
+                            torch.save(model.model.state_dict(), f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth')
+                        else:
+                            torch.save(model.state_dict(), f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth')
+                        best_score = score
+
+                    if cfg.is_kg:
+                        pass
+                    elif epoch == cfg.epochs:
+                        if cfg.use_seg:
+                            torch.save(model.model.state_dict(), f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth')
+                        else:
+                            torch.save(model.state_dict(), f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth')
+                    else:
+                        checkpoint = {
+                            "model": model.state_dict(),
+                            "optimizer": optimizer.state_dict(),
+                        }
+                        if scheduler is not None:
+                            checkpoint["scheduler"] = scheduler.state_dict()
+
+                        if cfg["mixed_precision"]:
+                            checkpoint["scaler"] = scaler.state_dict()
+
+                        torch.save(checkpoint, f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth')
+
+                    logfile(f'[EPOCH {epoch}] micro f1 score: {micro_score}, acc score: {acc}, val loss: {loss_valid}, AUC: {auc}, MAP: {map}')
+
+                if cfg.neptune_project and cfg.mode == 'train':
+                    neptune.stop()
+
+                del model, scheduler, optimizer
+                gc.collect()
+            # elif cfg.mode == 'val':
+            if cfg.mode in['train', 'val']:
+                model = get_model(cfg).to(device)
+                # chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth'
+                chpt_path = f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth'
+                # chpt_path = f'{cfg.out_dir}/best_loss_fold{fold_id}_st{cfg.stage}.pth'
+                checkpoint = torch.load(chpt_path, map_location="cpu")
+                if cfg.use_seg:
+                    model.model.load_state_dict(checkpoint)
+                else:
+                    model.load_state_dict(checkpoint)
                 del checkpoint
                 gc.collect()
 
-            if cfg.neptune_project:
-                with open('resources/neptune_api.txt') as f:
-                    token = f.read().strip()
-                neptune.init(cfg.neptune_project, api_token = token)
-                neptune.create_experiment(name=cfg.name, params=cfg)
-                neptune.append_tag(cfg.model_architecture)
-                neptune.append_tag(f'fold {fold_id}')
-                neptune.append_tag(f'use_seg {cfg.use_seg}')
-                neptune.append_tag(f'{cfg.model}')
-
-            if cfg.use_edata:
-                tr_it = iter(e_loader)
-            else:
-                tr_it = None
-
-            loss_min = 1e6
-            map_score_max = 0
-            best_score = 0
-            for epoch in range(1, cfg.epochs+1):
-                logfile(f'====epoch {epoch} ====')
-                loss_train, tr_it = train_func(model, train_loader, scheduler, device, epoch, tr_it)
-                loss_valid, micro_score, acc, auc, map, pred_probs = valid_func(model, valid_loader)
-                if cfg.loss in ['ce', 'all']:
-                    ce_criterion.next_epoch()
-
-                score = 0.4*acc + 0.4*map + 0.2*auc
-                if score > best_score:
-                    logfile(f'best_score ({best_score:.6f} --> {score:.6f}). Saving model ...')
-                    if cfg.use_seg:
-                        torch.save(model.model.state_dict(), f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth')
-                    else:
-                        torch.save(model.state_dict(), f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth')
-                    best_score = score
-
-                if epoch == cfg.epochs:
-                    if cfg.use_seg:
-                        torch.save(model.model.state_dict(), f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth')
-                    else:
-                        torch.save(model.state_dict(), f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth')
+                if cfg.model in ['model_2']:
+                    criterion = torch.nn.BCELoss()
                 else:
-                    checkpoint = {
-                        "model": model.state_dict(),
-                        "optimizer": optimizer.state_dict(),
-                    }
-                    if scheduler is not None:
-                        checkpoint["scheduler"] = scheduler.state_dict()
+                    criterion = torch.nn.BCEWithLogitsLoss()
+                ce_criterion = torch.nn.CrossEntropyLoss()
+                # ce_criterion = OnlineLabelSmoothing(alpha=0.5, n_classes=cfg.output_size, smoothing=0.1)
 
-                    if cfg["mixed_precision"]:
-                        checkpoint["scaler"] = scaler.state_dict()
+                loss_valid, micro_score, macro_score, auc, map, pred_probs = valid_func(model, valid_loader)
+                print(f'[FOLD {fold_id}] micro f1 score: {micro_score}, macro_score f1 score: {macro_score}, val loss: {loss_valid}, AUC: {auc}, MAP: {map}')
 
-                    torch.save(checkpoint, f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth')
+                for i in range(pred_probs.shape[1]):
+                    val_df[f'pred_cls{i+1}'] = pred_probs[:,i]
 
-                logfile(f'[EPOCH {epoch}] micro f1 score: {micro_score}, acc score: {acc}, val loss: {loss_valid}, AUC: {auc}, MAP: {map}')
+                oofs.append(val_df)
 
-            if cfg.neptune_project and cfg.mode == 'train':
-                neptune.stop()
+                if cc == (len(cfg.folds)-1):
+                    oof_df = pd.concat(oofs)
+                    if cfg.output_size>2:
+                        val(oof_df)
+                    oof_df.to_csv(f'{cfg.out_dir}/oofs{cfg.stage}.csv', index=False)
 
-            del model, scheduler, optimizer
-            gc.collect()
-        # elif cfg.mode == 'val':
-        if cfg.mode in['train', 'val']:
+                del model 
+                gc.collect()
+            elif cfg.mode in ['predict']:
+                model = get_model(cfg).to(device)
+                # chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth'
+                chpt_path = f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth'
+                # chpt_path = f'{cfg.out_dir}/best_loss_fold{fold_id}_st{cfg.stage}.pth'
+                checkpoint = torch.load(chpt_path, map_location="cpu")
+                if cfg.use_seg:
+                    model.model.load_state_dict(checkpoint)
+                else:
+                    model.load_state_dict(checkpoint)
+                del checkpoint
+                gc.collect()
+
+                # if cfg.model in ['model_2']:
+                #     criterion = torch.nn.BCELoss()
+                # else:
+                #     criterion = torch.nn.BCEWithLogitsLoss()
+
+                # loss_valid, micro_score, macro_score, auc, map, pred_probs = valid_func(model, valid_loader)
+                # print(f'[FOLD {fold_id}] micro f1 score: {micro_score}, macro_score f1 score: {macro_score}, val loss: {loss_valid}, AUC: {auc}, MAP: {map}')
+
+                pred_probs = test_func([model], valid_loader)
+                # if cc ==0:
+                #     pred_probs_all = pred_probs
+                # else:
+                #     pred_probs_all += pred_probs
+                # if cc == (len(cfg.folds)-1):
+                #     pred_probs_all /=len(cfg.folds)
+                for i in range(pred_probs.shape[1]):
+                    val_df[f'pred_cls{i+1}'] = pred_probs[:,i]
+
+                val_df.to_csv(f'{cfg.out_dir}/pseudo_st{cfg.stage}_fold{cc}.csv', index=False)
+
+                del model 
+                gc.collect()
+
+    elif cfg.mode in ['test', 'predict']:
+        transforms_valid = albumentations.Compose([
+            albumentations.Resize(cfg.input_size, cfg.input_size),
+        ])
+        models = []
+        for cc, fold_id in enumerate(cfg.folds):
             model = get_model(cfg).to(device)
-            chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth'
-            # chpt_path = f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth'
-            # chpt_path = f'{cfg.out_dir}/best_loss_fold{fold_id}_st{cfg.stage}.pth'
+            if cfg.is_kg:
+                chpt_path = f'{cfg.wei_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth'
+            else:
+                chpt_path = f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth'
             checkpoint = torch.load(chpt_path, map_location="cpu")
             if cfg.use_seg:
                 model.model.load_state_dict(checkpoint)
             else:
                 model.load_state_dict(checkpoint)
+            model.eval()
+            models.append(model)
+
             del checkpoint
             gc.collect()
 
-            if cfg.model in ['model_2']:
-                criterion = torch.nn.BCELoss()
+        if cfg.mode in ['test']:
+            if cfg.is_kg:
+                val_df = pd.read_csv('test_meta.csv')
             else:
-                criterion = torch.nn.BCEWithLogitsLoss()
-            ce_criterion = torch.nn.CrossEntropyLoss()
-            # ce_criterion = OnlineLabelSmoothing(alpha=0.5, n_classes=cfg.output_size, smoothing=0.1)
+                val_df = pd.read_csv('data/test_meta.csv')
+        val_dataset = SIIMDataset(val_df, tfms=transforms_valid, cfg=cfg, mode='test')
+        valid_loader = DataLoader(val_dataset, batch_size=cfg.batch_size, shuffle=False,  num_workers=8, pin_memory=True)
 
-            loss_valid, micro_score, macro_score, auc, map, pred_probs = valid_func(model, valid_loader)
-            print(f'[FOLD {fold_id}] micro f1 score: {micro_score}, macro_score f1 score: {macro_score}, val loss: {loss_valid}, AUC: {auc}, MAP: {map}')
+        pred_probs = test_func(models, valid_loader)
 
-            for i in range(pred_probs.shape[1]):
-                val_df[f'pred_cls{i+1}'] = pred_probs[:,i]
+        for i in range(pred_probs.shape[1]):
+            val_df[f'pred_cls{i+1}'] = pred_probs[:,i]
 
-            oofs.append(val_df)
-
-            if cc == (len(cfg.folds)-1):
-                oof_df = pd.concat(oofs)
-                if cfg.output_size>2:
-                    val(oof_df)
-                oof_df.to_csv(f'{cfg.out_dir}/oofs{cfg.stage}.csv', index=False)
-
-            del model 
-            gc.collect()
-        elif cfg.mode in ['pseudo']:
-            model = get_model(cfg).to(device)
-            # chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth'
-            chpt_path = f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth'
-            # chpt_path = f'{cfg.out_dir}/best_loss_fold{fold_id}_st{cfg.stage}.pth'
-            checkpoint = torch.load(chpt_path, map_location="cpu")
-            if cfg.use_seg:
-                model.model.load_state_dict(checkpoint)
-            else:
-                model.load_state_dict(checkpoint)
-            del checkpoint
-            gc.collect()
-
-            if cfg.model in ['model_2']:
-                criterion = torch.nn.BCELoss()
-            else:
-                criterion = torch.nn.BCEWithLogitsLoss()
-
-            loss_valid, micro_score, macro_score, auc, map, pred_probs = valid_func(model, valid_loader)
-            print(f'[FOLD {fold_id}] micro f1 score: {micro_score}, macro_score f1 score: {macro_score}, val loss: {loss_valid}, AUC: {auc}, MAP: {map}')
-
-            if cc ==0:
-                pred_probs_all = pred_probs
-            else:
-                pred_probs_all += pred_probs
-            if cc == (len(cfg.folds)-1):
-                pred_probs_all /=len(cfg.folds)
-                for i in range(pred_probs_all.shape[1]):
-                    val_df[f'pred_cls{i+1}'] = pred_probs_all[:,i]
-
-                if cfg.output_size>2:
-                    val(val_df)
-                val_df.to_csv(f'{cfg.out_dir}/pseudo_st{cfg.stage}.csv', index=False)
-
-            del model 
-            gc.collect()
-
-        elif cfg.mode in ['test', 'predict']:
-            model = get_model(cfg).to(device)
-            chpt_path = f'{cfg.out_dir}/last_checkpoint_fold{fold_id}_st{cfg.stage}.pth'
-            # chpt_path = f'{cfg.out_dir}/best_map_fold{fold_id}_st{cfg.stage}.pth'
-            # chpt_path = f'{cfg.out_dir}/best_loss_fold{fold_id}_st{cfg.stage}.pth'
-            checkpoint = torch.load(chpt_path, map_location="cpu")
-            if cfg.use_seg:
-                model.model.load_state_dict(checkpoint)
-            else:
-                model.load_state_dict(checkpoint)
-            del checkpoint
-            gc.collect()
-
-            pred_probs = test_func(model, valid_loader)
-
-            if cc ==0:
-                pred_probs_all = pred_probs
-            else:
-                pred_probs_all += pred_probs
-            if cc == (len(cfg.folds)-1):
-                pred_probs_all /=len(cfg.folds)
-                for i in range(pred_probs_all.shape[1]):
-                    val_df[f'pred_cls{i+1}'] = pred_probs_all[:,i]
-
-                val_df.to_csv(f'{cfg.out_dir}/{cfg.name}_{cfg.mode}_st{cfg.stage}.csv', index=False)
-
-            del model 
-            gc.collect()
+        if cfg.is_kg:
+            val_df.to_csv(f'{cfg.name}.csv', index=False)
         else:
-            raise NotImplementedError(f"mode {cfg.mode} has not implemented!")
+            val_df.to_csv(f'{cfg.out_dir}/{cfg.name}_{cfg.mode}_st{cfg.stage}.csv', index=False)
+
+        # del model 
+        # gc.collect()
 
 
 

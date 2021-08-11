@@ -144,8 +144,8 @@ def train(hyp, opt, device, tb_writer=None):
     # Model
     pretrained = weights.endswith('.pt')
 
-    model = V5Dual(opt.cfg, num_classes=nc,  pretrained=weights, device=device).to(device)
-    # model = V5Centernet(opt.cfg, num_classes=nc,  pretrained=weights, device=device).to(device)
+    # model = V5Dual(opt.cfg, num_classes=nc,  pretrained=weights, device=device).to(device)
+    model = V5Centernet(opt.cfg, num_classes=nc,  pretrained=weights, device=device).to(device)
 
     # model = FlexibleModel(model_config=opt.cfg).to(device)
 
@@ -248,7 +248,10 @@ def train(hyp, opt, device, tb_writer=None):
     # Image sizes
     if hasattr(model, 'model'):
         gs = max(int(model.model.stride.max()), 32)  # grid size (max stride)
-        nl = model.model.detection.nl  # number of detection layers (used for scaling hyp['obj'])
+        try:
+            nl = model.model.model[-1].nl
+        except:
+            nl = model.model.detection.nl  # number of detection layers (used for scaling hyp['obj'])
     else:
         gs = max(int(model.stride.max()), 32)  # grid size (max stride)
         nl = model.detection.nl  # number of detection layers (used for scaling hyp['obj'])

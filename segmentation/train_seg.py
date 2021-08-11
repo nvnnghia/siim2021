@@ -14,6 +14,13 @@ import albumentations
 from transformers import get_cosine_schedule_with_warmup, get_linear_schedule_with_warmup
 from shutil import copyfile
 import random 
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--weight_path', default='', help='weight_path')
+parser.add_argument('--image_path', default='../../data/png512/test/*.png', help='is_wbf2')
+args = parser.parse_args()
+
 
 def set_seed(seed=1234):
     random.seed(seed)
@@ -167,7 +174,11 @@ def test_func(model, test_dataset):
                 # cv2.imwrite(f'draw/test/{count}.png', image)
 
                 seg = cv2.resize(seg, (512,512))
-                cv2.imwrite(f'draw/test/{path.split("/")[-1]}', seg)
+                if cfg.is_kg:
+                    # save_dir = f'/kaggle/tmp/test/image/'
+                    cv2.imwrite(f'/kaggle/tmp/test/mask//{path.split("/")[-1]}', seg)
+                else:
+                    cv2.imwrite(f'draw/edata/{path.split("/")[-1]}', seg)
                 count +=1
 
 
@@ -202,10 +213,15 @@ def get_dataloader():
 if __name__ == '__main__':
     set_seed(cfg.seed)
 
+    if os.path.isfile('../input/siim-covid19-detection/sample_submission.csv'):
+        cfg.is_kg = True
+    else:
+        cfg.is_kg = False
+
     os.makedirs(str(cfg.out_dir), exist_ok=True)
 
     device = "cuda"
-    model = CarModel(model_name=cfg.model_name, pretrained=True, pool = 'gem')
+    model = CarModel(model_name=cfg.model_name, pretrained=False, pool = 'gem')
     model.to(device)
 
     if cfg.mode == 'train':
@@ -231,18 +247,26 @@ if __name__ == '__main__':
                 best_loss = loss_valid
 
     elif cfg.mode == 'test':
-        chpt_path = f'{cfg.out_dir}/best_loss.pth'
+        if cfg.is_kg:
+            chpt_path = args.weight_path
+        else:
+            chpt_path = f'{cfg.out_dir}/best_loss.pth'
+
         checkpoint = torch.load(chpt_path, map_location="cpu")
         model.load_state_dict(checkpoint)
 
-        test_image_paths = glob('../data/png512/test/*.png')
-        # test_image_paths = glob('../data/c14/*/images/*.png')
+        if cfg.is_kg:
+            test_image_paths = glob(args.image_path)
+        else:
+            # test_image_paths = glob('../data/png512/test/*.png')
+            test_image_paths = glob('../data/external/*.png')
+            # test_image_paths = glob('../data/c14/*/images/*.png')
 
-        # path1 = glob('../data/ricord1024/*jpg')
-        # path2 = glob('../data/png512/test/*png')
-        # path3 = glob('../data/bimcv1024/*png')
-        # path4 = glob('../data/v7-labs/data/images/*')
-        # test_image_paths = path1 + path2 + path3 + path4
+            # path1 = glob('../data/ricord1024/*jpg')
+            # path2 = glob('../data/png512/test/*png')
+            # path3 = glob('../data/bimcv1024/*png')
+            # path4 = glob('../data/v7-labs/data/images/*')
+            # test_image_paths = path1 + path2 + path3 + path4
 
         print(len(test_image_paths))
 

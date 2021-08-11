@@ -2,7 +2,7 @@ from tqdm import tqdm
 from sklearn.model_selection import StratifiedKFold
 import pandas as pd 
 
-seed = 42 
+seed = 44 
 
 data_dir = 'data/'
 
@@ -60,6 +60,14 @@ df_image = df_image.drop(drop_ids)
 #~remove unlabel images
 
 df_image.to_csv(f'{data_dir}/train_split_seed{seed}.csv', index=True)
+
+df_image1 = df_image[df_image.fold<5]
+df_image1.to_csv(f'{data_dir}/train_split_seed{seed}_haff1.csv', index=True)
+
+
+df_image = df_image[df_image.fold>=5]
+df_image['fold'] -=5
+df_image.to_csv(f'{data_dir}/train_split_seed{seed}_haff2.csv', index=True)
 
 for fold_id in [0,1,2,3,4]:
 	print(f'\n========= FOLD {fold_id} ========')

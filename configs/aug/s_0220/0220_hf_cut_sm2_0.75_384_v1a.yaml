@@ -27,9 +27,9 @@ transform:
   #  min_height: 384
   #  min_width: 384
 
-  - __class_fullname__: albumentations.augmentations.transforms.InvertImg
-    always_apply: false
-    p: 0.5
+  #- __class_fullname__: albumentations.augmentations.transforms.InvertImg
+  #  always_apply: false
+  #  p: 0.5
   - __class_fullname__: albumentations.augmentations.transforms.HorizontalFlip
     always_apply: false
     p: 0.5

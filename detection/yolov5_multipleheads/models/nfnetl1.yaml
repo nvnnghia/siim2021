@@ -1,0 +1,16 @@
+backbone:
+  type: nfnet
+  version: eca_nfnet_l1  # 18, 34, 50, 101, 152
+  dcn: False
+  cbam: False
+  pretrained: True
+  pool: gem
+  dropout: 0.5
+  out_dim: 5
+head:
+  nc: 3
+  stride: [8.0, 16.0, 32.0]
+  anchors:
+    - [10,13, 16,30, 33,23]  # P3/8
+    - [30,61, 62,45, 59,119]  # P4/16
+    - [116,90, 156,198, 373,326]  # P5/32

@@ -3,6 +3,7 @@ from torch import nn
 import timm
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
+from timm.models.layers import  ClassifierHead
 # from utils.config import mixed_precision
 # from torch.cuda.amp import autocast
 
@@ -51,10 +52,16 @@ class SIIMModel(nn.Module):
         else:
             raise NotImplementedError(f"pooling type {pool} has not implemented!")
 
-        if 'resne' in model_name: #resnet
+        # print(self.model)
+        if 'resnetv2' in model_name:
+            n_features = self.model.num_features
+            self.model.head = ClassifierHead(n_features, out_dim, pool_type='avg', drop_rate=dropout, use_conv=True)
+
+        elif 'resne' in model_name: #resnet
             n_features = self.model.fc.in_features
             self.model.global_pool = nn.Identity()
             self.model.fc = nn.Identity()
+            
         elif "efficientnet" in model_name: 
             n_features = self.model.classifier.in_features
             self.model.global_pool = nn.Identity()
@@ -74,6 +81,7 @@ class SIIMModel(nn.Module):
             raise NotImplementedError(f"model type {model_name} has not implemented!")
         
 
+        # if 'resnetv2' not in model_name:
         self.fc = nn.Linear(n_features, out_dim)
         self.dropout = nn.Dropout(dropout)
 
@@ -81,6 +89,8 @@ class SIIMModel(nn.Module):
     def forward(self, x):
         bs = x.size(0)
         features = self.model(x)
+        if 'resnetv2' in self.model_name:
+            return features
         if not 'coat_' in self.model_name and not 'cait_' in self.model_name and not 'swin_' in self.model_name and not 'vit_' in self.model_name:
             features = self.pooling(features).view(bs, -1)
         output = self.fc(self.dropout(features))

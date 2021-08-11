@@ -108,6 +108,13 @@ class SIIMDataset(Dataset):
             Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
 
+        if self.cfg.normalize:
+        	self.tensor_tfms = Compose([
+            ToTensor(),
+            # Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ])
+
+
         self.gen_images = gen_images
         if gen_images:
             self.c14_df = pd.read_csv('data/c14/Data_Entry_2017.csv')
@@ -124,17 +131,36 @@ class SIIMDataset(Dataset):
 
         row = self.df.loc[index]
         if self.mode in ['test']:
-            path = f'{self.cfg.image_dir}/test/{row.image_id}.png'
+            if self.cfg.is_kg: 
+                path = f'/kaggle/tmp/test/image/{row.image_id}.png'
+            else:
+                path = f'{self.cfg.image_dir}/train/{row.image_id}.png'
+                path = f'{self.cfg.image_dir}/test/{row.image_id}.png'
         elif self.mode in ['predict'] or self.mode in ['edata']:
-            path = f'data/{row.values[0]}'
+            if self.cfg.is_kg:
+                path = f'/kaggle/tmp/test/image/{row.image_id}.png'
+            else:
+                path = f'data/{row.values[0]}'
         elif self.mode in ['ricord']:
             path = f'data/ricord1024/{row.values[0]}'
         else:
             path = f'{self.cfg.image_dir}/train/{row.id[:-6]}.png'
+
+            
         img = cv2.imread(path)  
 
         if self.mode in ['predict', 'edata', 'ricord']:
             img = cv2.resize(img, (512, 512))
+
+        if self.cfg.use_ben:
+            img1=cv2.addWeighted ( img,4, cv2.GaussianBlur( img , (0,0) , 20) ,-4 ,150)
+            img1 = cv2.cvtColor(img1,cv2.COLOR_RGB2GRAY)
+
+            img2 = cv2.equalizeHist(img[:,:,0])
+            img[:,:,0] = img1
+            img[:,:,1] = img2
+
+        # img = cv2.cvtColor(img,cv2.COLOR_GRAY2RGB)
 
         if self.gen_images:
             if random.randint(0,2) == 1:
@@ -144,13 +170,19 @@ class SIIMDataset(Dataset):
             if self.mode in ['edata']:
                 mask = cv2.imread(f'segmentation/draw/edata/{path.split("/")[-1]}', 0)
             elif self.mode in ['test']:
-                mask = cv2.imread(f'segmentation/draw/test/{path.split("/")[-1]}', 0)
+                if self.cfg.is_kg: 
+                    mask = cv2.imread(f'/kaggle/tmp/test/mask/{path.split("/")[-1]}', 0)
+                else:
+                    mask = cv2.imread(f'segmentation/draw/test/{path.split("/")[-1]}', 0)
             else:
                 mask = cv2.imread(f'segmentation/draw/train/{path.split("/")[-1]}', 0)
             img[:,:,0] = mask
 
         if self.cfg.histogram_norm:
             img = do_histogram_norm(img).astype(np.uint8)
+
+        for _ in range(self.cfg.rot):
+            img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
 
         if self.mode not in ['test', 'predict'] and self.mode not in ['edata']:
             if self.cfg.use_seg or self.cfg.output_size>4:
@@ -185,6 +217,9 @@ class SIIMDataset(Dataset):
                 res = self.transform(image=img)
             
             img = res['image']
+
+        if self.cfg.normalize:
+        	img = (img/255).astype(np.float32)
 
         img = self.tensor_tfms(img)
         if self.mode in ['test', 'predict']:
@@ -347,6 +382,9 @@ class C14Dataset(Dataset):
             if is_lateral:
                 img = cv2.imread(self.lateral_paths[index%len(self.lateral_paths)])
 
+        for _ in range(self.cfg.rot):
+            img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+
         if self.transform is not None:
             res = self.transform(image=img)
             img = res['image']
@@ -455,3 +493,4 @@ class SimpleBalanceClassSampler(Sampler):
 
     def __len__(self):
         return int(self.length)
+

@@ -12,6 +12,7 @@ parser = argparse.ArgumentParser(description="")
 parser.add_argument("-C", "--config", help="config filename")
 parser.add_argument("-M", "--mode", default='train', help="mode type")
 parser.add_argument("-S", "--stage", default=0, help="stage")
+parser.add_argument("-W", "--wei_dir", default='.', help="test weight dir")
 
 parser_args, _ = parser.parse_known_args(sys.argv)
 
@@ -46,7 +47,12 @@ if "label_smmoth" not in cfg.keys():
     cfg["label_smmoth"] = 0
 if "gen_images" not in cfg.keys():
     cfg["gen_images"] = 0
-     
+if "use_ben" not in cfg.keys():
+    cfg["use_ben"] = 0
+if "rot" not in cfg.keys():
+    cfg["rot"] = 0
+
 cfg["mode"] = parser_args.mode
 cfg["seed"] += int(parser_args.stage)
 cfg["stage"] = int(parser_args.stage)
+cfg["wei_dir"] = parser_args.wei_dir

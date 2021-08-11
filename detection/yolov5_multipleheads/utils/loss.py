@@ -120,7 +120,10 @@ class ComputeLoss:
                 det = model.module.model.detection
         else:
             if hasattr(model, 'model'):
-                det = model.model.detection
+                try:
+                    det = model.model.detection
+                except:
+                    det = model.model.model[-1] 
             else:
                 det = model.detection
 
