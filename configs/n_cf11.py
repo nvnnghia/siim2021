@@ -38,5 +38,3 @@ cfg = {
     "loss": 'bce',
     "muliscale": 0,
 }
-
-# swin_large_patch4_window12_384 vit_large_patch16_384

@@ -1,7 +1,5 @@
 import os
 
-outputdir = "outputs/" + os.path.basename(__file__).split(".")[0]
-
 cfg = {
     "debug": 0,
     "name": os.path.basename(__file__).split(".")[0],
@@ -11,10 +9,10 @@ cfg = {
     "input_size": 384,
     "output_size": 15,
     "use_seg":False,
-    "out_dir": f"{outputdir}/eca_nfnet_l1c",
+    "out_dir": f"outputs/n_cf2_pretraining/eca_nfnet_l1b",
     "folds": [0,1,2,3,4],
-    # "augmentation": "s_0220/0220_hf_cut_sm2_0.75_384_v1b.yaml",
-    "augmentation": "s_0220/0220_hf_cut_sm2_0.75_384.yaml",
+    "augmentation": "s_0220/0220_hf_cut_sm2_0.75_384_v1b.yaml",
+    # "augmentation": "s_0220/0220_hf_cut_sm2_0.75_384.yaml",
     "weight_file": None,  # "/model_state_45000.pth",
     "resume_training": False,
     "dropout": 0.5,

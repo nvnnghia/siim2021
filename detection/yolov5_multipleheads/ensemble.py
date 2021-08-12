@@ -141,7 +141,7 @@ def prefilter_boxes(boxes, scores, labels, weights, thr):
                 new_boxes[label] = []
             new_boxes[label].append(b)
 
-    # Sort each list in dict by score and transform it to numpy array
+    # Sort each list in dict by score and transform it to numpy array,  
     for k in new_boxes:
         current_boxes = np.array(new_boxes[k])
         new_boxes[k] = current_boxes[current_boxes[:, 1].argsort()[::-1]]
