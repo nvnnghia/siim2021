@@ -2,7 +2,7 @@ from tqdm import tqdm
 from sklearn.model_selection import StratifiedKFold
 import pandas as pd 
 
-seed = 44 
+seed = 42 
 
 data_dir = 'data/'
 

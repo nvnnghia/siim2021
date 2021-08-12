@@ -17,9 +17,6 @@ segmentation/weights/
 detection/*/*pth
 detection/*/*csv
 detection/*/*txt
-detection/*/*npy
 results/
-detection/yolov5_mean/
-detection/yolov5_multipleheads/moreoof/
-detection/efficientDet/archive/
+detection/removed/
 segmentation1/

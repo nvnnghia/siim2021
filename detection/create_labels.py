@@ -6,7 +6,10 @@ from tqdm import tqdm
 curr_dir = os.getcwd()
 image_dir = '../data/png512'
 csv_path = '../data/train_split_seed42.csv'
-num_cls = 3
+num_cls = 1
+
+os.makedirs('data', exist_ok=True)
+os.makedirs(f'labels{num_cls}', exist_ok=True)
 
 df = pd.read_csv(csv_path)
 
