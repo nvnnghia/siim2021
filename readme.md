@@ -1,5 +1,22 @@
 # SIIM COVID 2021
 
+## Data Preparation
+* Download resized SIIM2021 dataset (https://www.kaggle.com/xhlulu/siim-covid19-resized-to-512px-png) to data/png512/
+* Dowload NIH dataset (https://www.kaggle.com/nih-chest-xrays/data) to data/c14/
+* run `python create_folds.py` to split train data into folds
+
+## Training
+* NIH pretraining
+   - Download our NIH pretrained weights from https://www.kaggle.com/nvnnghia/siimnihpretrained 
+   - If you want to train it yourself, run: 
+        ```
+        python run_pretraining.py
+        ```
+* Final Training: 
+```
+python run_train.py
+```
+
 ## Directory Structure
 ├── data    
 │ ├── c14    
@@ -33,16 +50,6 @@
 ├── main.py    
 ├── pretraining.py    
 ├── run.py    
-
-
-## Data Preparation
-* Download resized SIIM2021 dataset (https://www.kaggle.com/xhlulu/siim-covid19-resized-to-512px-png) to data/
-* Dowload NIH dataset (https://www.kaggle.com/nih-chest-xrays/data) to data/c14/
-* run `python create_folds.py` to split train data into folds
-
-## Training
-* C14 Pretraining: `python run_pretraining.py`
-* Final Training: `python run_train.py`
 
 
 
