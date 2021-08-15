@@ -11,8 +11,6 @@ detection/yolov5/*csv
 detection/efficientDet/weights/
 detection/efficientDet/pretrained/
 segmentation/__pycache__/
-segmentation/draw/
-segmentation/data/
 segmentation/weights/
 detection/*/*pth
 detection/*/*csv
