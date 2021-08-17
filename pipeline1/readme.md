@@ -1,4 +1,4 @@
-# SIIM COVID 2021
+# SIIM COVID 2021 Pipeline1
 
 ## Data Preparation
 * Download resized SIIM2021 dataset (https://www.kaggle.com/xhlulu/siim-covid19-resized-to-512px-png) to data/png512/
