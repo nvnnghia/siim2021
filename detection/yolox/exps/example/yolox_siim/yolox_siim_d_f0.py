@@ -98,7 +98,7 @@ class Exp(MyExp):
         from yolox.data import SIIMDetection, ValTransform
 
         valdataset = SIIMDetection(
-            data_dir='/home/pintel/nvnn/dataset/VOCtrainval_11-May-2012/VOCdevkit',
+            data_dir='',
             image_sets='../data/val_f0_s42_cls1.txt',
             img_size=self.test_size,
             preproc=ValTransform(

@@ -144,8 +144,11 @@ def train(hyp, opt, device, tb_writer=None):
     # Model
     pretrained = weights.endswith('.pt')
 
-    # model = V5Dual(opt.cfg, num_classes=nc,  pretrained=weights, device=device).to(device)
-    model = V5Centernet(opt.cfg, num_classes=nc,  pretrained=weights, device=device).to(device)
+    if 'yolov5' in opt.cfg:
+        model = V5Centernet(opt.cfg, num_classes=nc,  pretrained=weights, device=device).to(device)
+    else:
+        model = V5Dual(opt.cfg, num_classes=nc,  pretrained=weights, device=device).to(device)
+    
 
     # model = FlexibleModel(model_config=opt.cfg).to(device)
 
@@ -574,8 +577,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', type=str, default='yolov5s.pt', help='initial weights path')
     parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
-    parser.add_argument('--data', type=str, default='data/coco128.yaml', help='data.yaml path')
-    parser.add_argument('--hyp', type=str, default='data/hyp.scratch.yaml', help='hyperparameters path')
+    parser.add_argument('--data', type=str, default='data1/coco128.yaml', help='data.yaml path')
+    parser.add_argument('--hyp', type=str, default='data1/hyp.scratch.yaml', help='hyperparameters path')
     parser.add_argument('--epochs', type=int, default=300)
     parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs')
     parser.add_argument('--img-size', nargs='+', type=int, default=[640, 640], help='[train, test] image sizes')
@@ -598,7 +601,7 @@ if __name__ == '__main__':
     parser.add_argument('--project', default='runs/train', help='save to project/name')
     parser.add_argument('--entity', default=None, help='W&B entity')
     parser.add_argument('--name', default='exp', help='save to project/name')
-    parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
+    parser.add_argument('--exist-ok', action='store_false', help='existing project/name ok, do not increment')
     parser.add_argument('--quad', action='store_true', help='quad dataloader')
     parser.add_argument('--linear-lr', action='store_true', help='linear LR')
     parser.add_argument('--label-smoothing', type=float, default=0.0, help='Label smoothing epsilon')

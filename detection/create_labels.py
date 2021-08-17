@@ -4,8 +4,8 @@ import numpy as np
 from tqdm import tqdm 
 
 curr_dir = os.getcwd()
-image_dir = '../data/png512'
-csv_path = '../data/train_split_seed42.csv'
+image_dir = '../pipeline1/data/png512'
+csv_path = '../pipeline1/data/train_split_seed42.csv'
 num_cls = 1
 
 os.makedirs('data', exist_ok=True)
