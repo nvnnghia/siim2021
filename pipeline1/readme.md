@@ -1,11 +1,22 @@
 # SIIM COVID 2021 Pipeline1
+## 1.INSTALLATION
+- Ubuntu 18.04.5 LTS
+- CUDA 11.2
+- Python 3.7.5
+- python packages are detailed separately in requirements.txt
+```
+$ conda create -n envs python=3.7.5
+$ conda activate envs
+$ pip install -r requirements.txt
+$ pip install torch==1.8.0+cu111 torchvision==0.9.0+cu111 -f https://download.pytorch.org/whl/torch_stable.html
+```
 
-## Data Preparation
+## 2. Data Preparation
 * Download resized SIIM2021 dataset (https://www.kaggle.com/xhlulu/siim-covid19-resized-to-512px-png) to data/png512/
 * Dowload NIH dataset (https://www.kaggle.com/nih-chest-xrays/data) to data/c14/
 * run `python create_folds.py` to split train data into folds
 
-## Training
+## 3. Training
 * NIH pretraining
    - Download our NIH pretrained weights from https://www.kaggle.com/nvnnghia/siimnihpretrained to outputs/
    - If you want to train it yourself, run: 

@@ -1,5 +1,17 @@
 # SIIM COVID 2021
-## Data
+## 1.INSTALLATION
+- Ubuntu 18.04.5 LTS
+- CUDA 11.2
+- Python 3.7.5
+- python packages are detailed separately in requirements.txt
+```
+$ conda create -n envs python=3.7.5
+$ conda activate envs
+$ pip install -r requirements.txt
+$ pip install torch==1.8.0+cu111 torchvision==0.9.0+cu111 -f https://download.pytorch.org/whl/torch_stable.html
+```
+
+## 2.Data
 * Download dataset to ../data/
 * run `python create_labels.py` to create yolov5 labels
 * Download pretrained weights to pretrained/
@@ -7,7 +19,7 @@
   - YoloX pretrained weights: https://github.com/Megvii-BaseDetection/storage/releases/download/0.0.1/yolox_m.pth and https://github.com/Megvii-BaseDetection/storage/releases/download/0.0.1/yolox_darknet53.pth
   - EfficientDet pretrained weights: 
 
-## Train
+## 3.Train
 * yolov5: 
 ```
 $ cd yolov5
