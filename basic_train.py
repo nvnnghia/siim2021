@@ -61,12 +61,12 @@ def basic_train(cfg: Config, model, train_dl, valid_dl, loss_func, optimizer, sa
                     initial_lr = basic_lr / length
                     optimizer.param_groups[0]['lr'] = initial_lr * (i + 1)
                 # if cfg.loss.name == 'bce':
-                #     lbl = torch.zeros(label_image.shape[0], 4)
+                #     lbl = torch.zeros(label_image.shape[0], 2)
                 #     for ei, x in enumerate(label_image):
                 #         lbl[ei][x] = 1
                 # else:
-                lbl = label_image
-                # print(lbl)
+                # print(label_image)
+                lbl = label_image.float()
                 if cfg.loss.eps > 0:
                     lbl = (1.0 - cfg.loss.eps) * lbl + cfg.loss.eps / 4
                 bs = cfg.train.batch_size
@@ -77,24 +77,49 @@ def basic_train(cfg: Config, model, train_dl, valid_dl, loss_func, optimizer, sa
                 mask = mask.cuda()
                 r = np.random.rand(1)
                 if cfg.train.cutmix and cfg.train.beta > 0 and r < cfg.train.cutmix_prob:
-                    input, target_a, target_b, lam_a, lam_b = cutmix(img, lbl, cfg.train.beta)
+                    input, target_a, target_b, lam_a, lam_b, mask = cutmix(img, lbl, mask, cfg.train.beta)
                     if cfg.basic.amp == 'Native':
                         with torch.cuda.amp.autocast():
-                            cls = model(input)
+                            cls, seg = model(input)
                     else:
-                        cls = model(input)
+                        cls, seg = model(input)
                     # cls loss
                     # print(loss_func(cls, target_a).mean(1).shape)
                     # print(torch.tensor(
                     #     lam_a).cuda().float().shape)
-                    cls_loss = (loss_func(cls, target_a).mean() * torch.tensor(
+                    cls_loss = (loss_func(cls.float(), target_a).mean() * torch.tensor(
                         lam_a).cuda().float() +
-                            loss_func(cls, target_b).mean() * torch.tensor(
+                            loss_func(cls.float(), target_b).mean() * torch.tensor(
                                 lam_b).cuda().float())
+                    seg_loss = aux_loss(seg.float(), mask)
+                    # bce_loss = bce_loss[has_seg.bool()]
+                    if not len(seg_loss.shape) == 0:
+                        seg_loss = seg_loss.mean()
                     if not len(cls_loss.shape) == 0:
                         cls_loss = cls_loss.mean()
                     # bce_loss = torch.nan_to_num(bce_loss)
-                    loss = cls_loss
+                    loss = seg_loss * cfg.loss.seg_weight + cls_loss
+                    cls_losses.append(cls_loss.item())
+                    seg_losses.append(seg_loss.item())
+                    losses.append(loss.item())
+                    # input, target_a, target_b, lam_a, lam_b = cutmix(img, lbl, cfg.train.beta)
+                    # if cfg.basic.amp == 'Native':
+                    #     with torch.cuda.amp.autocast():
+                    #         cls = model(input)
+                    # else:
+                    #     cls = model(input)
+                    # # cls loss
+                    # # print(loss_func(cls, target_a).mean(1).shape)
+                    # # print(torch.tensor(
+                    # #     lam_a).cuda().float().shape)
+                    # cls_loss = (loss_func(cls, target_a).mean() * torch.tensor(
+                    #     lam_a).cuda().float() +
+                    #         loss_func(cls, target_b).mean() * torch.tensor(
+                    #             lam_b).cuda().float())
+                    # if not len(cls_loss.shape) == 0:
+                    #     cls_loss = cls_loss.mean()
+                    # # bce_loss = torch.nan_to_num(bce_loss)
+                    # loss = cls_loss
                 else:
                     if cfg.basic.amp == 'Native':
                         with torch.cuda.amp.autocast():
@@ -206,7 +231,7 @@ def basic_validate(mdl,  dl, loss_func,  cfg, tune=None):
             #     for ei, x in enumerate(label_image):
             #         lbl[ei][x] = 1
             # else:
-            lbl = label_image
+            lbl = label_image.float()
             img, lbl = img.cuda(), lbl.cuda()
             # img, lbl = img.cuda(), label_image.cuda()
             if cfg.basic.amp == 'Native':
@@ -237,12 +262,12 @@ def basic_validate(mdl,  dl, loss_func,  cfg, tune=None):
         predicted = np.concatenate(predicted)
         truth_ = np.concatenate(truth)
         # print(truth_)
-        if cfg.loss.name == 'bce':
-            truth = truth_
-        else:
-            truth = np.zeros((truth_.shape[0], 4))
-            for i, x in enumerate(truth_):
-                truth[i][x] = 1
+        # if cfg.loss.name == 'bce':
+        truth = truth_
+        # else:
+            # truth = np.zeros((truth_.shape[0], 2))
+            # for i, x in enumerate(truth_):
+            #     truth[i][x] = 1
         # print(truth)
         # print(truth.shape, predicted.shape)
         val_loss = np.array(losses).mean()
@@ -251,7 +276,8 @@ def basic_validate(mdl,  dl, loss_func,  cfg, tune=None):
         auc = macro_multilabel_auc(truth, predicted, gpu=-1)
         ap = average_precision_score(truth, predicted, average=None)
         # print([round(x, 3) for x in ap])
-        ap = np.mean(ap)
+        # ap = np.mean(ap)
+        ap = ap[0]
         f103 = f1_score(truth, predicted > 0.3, average='macro')
         f105 = f1_score(truth, predicted > 0.5, average='macro')
 

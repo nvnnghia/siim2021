@@ -410,14 +410,6 @@ class COVIDDataset(Dataset):
         self.cols = ['Negative for Pneumonia', 'Typical Appearance', 'Indeterminate Appearance', 'Atypical Appearance']
         self.cols2index = {x: i for i, x in enumerate(self.cols)}
         self.pl_file_path = '5m_plmaskv1' if self.cfg.data.pl_mask_path == 'none' else self.cfg.data.pl_mask_path
-        print('[ ! ] The pl mask we load is from {}'.format(self.pl_file_path))
-        if not self.cfg.data.oof_file == 'none':
-            self.ns = True
-            print('[ ! ] Noise student, ratio of oofs: {}'.format(self.cfg.data.oof_ratio))
-            path = Path(os.path.dirname(os.path.realpath(__file__)))
-            self.oof = pd.read_csv(path / 'oofs' / self.cfg.data.oof_file).set_index('ImageUID')
-        else:
-            self.ns = False
 
     def __len__(self):
         return len(self.studys)
@@ -430,28 +422,19 @@ class COVIDDataset(Dataset):
         study = [idx for _ in range(sub_df.shape[0])]
         image_as_study = []
         bbox = []
-        has_oof_mask = False
-        label = self.cols2index[sub_df[self.cols].idxmax(1).values[0]]
+        label_study = self.cols2index[sub_df[self.cols].idxmax(1).values[0]]
         for i, row in sub_df.iterrows():
-            image_label = row[self.cols].values.astype(np.float)
-            if self.ns and row.ImageUID in list(self.oof.index) and self.mode == 'train':
-                ns_label = self.oof.loc[row.ImageUID][self.cols].values.astype(np.float)
-                image_label = (1 - self.cfg.data.oof_ratio) * image_label + self.cfg.data.oof_ratio * ns_label
-                # load oof mask
-                if not self.cfg.data.mask_oof_path == 'none':
-                    mask2 = np.load(str(self.path / 'input/{}/{}.npy'.format(
-                        self.cfg.data.mask_oof_path, row.ImageUID.replace('.png', ''))
-                    )).astype(np.float64)
-                    has_oof_mask = True
-                # print(image_label)
-            # print(str(self.path / f'input/train/{row.ImageUID}.png'))
+            if type(row['boxes']) == str:
+                if row['boxes'] == 'none':
+                    label = torch.tensor([row['Negative for Pneumonia'], 1 - row['Negative for Pneumonia']])
+                else:
+                    label = torch.tensor([0, 1])
+            else:
+                label = torch.tensor([1, 0])
             img = cv2.imread(str(self.path / f'input/train/{row.ImageUID}.png'))
-            if not img.shape[0] == self.cfg.transform.size:
-                img = cv2.resize(img, (self.cfg.transform.size, self.cfg.transform.size))
             sz = self.cfg.transform.size
             mask = np.zeros((sz, sz))
             if type(row.boxes) == str and row.boxes == 'none':
-                has_mask = 1
                 row.boxes = np.nan
                 # mask = (np.load(str(self.path / 'input/{}/fold{}/{}.npy'.format(
                 #     self.pl_file_path, self.cfg.experiment.run_fold, row.ImageUID.replace('.png', ''))
@@ -460,16 +443,6 @@ class COVIDDataset(Dataset):
                 mask = np.load(str(self.path / 'input/{}/fold{}/{}.npy'.format(
                     self.pl_file_path, self.cfg.experiment.run_fold, row.ImageUID.replace('.png', ''))
                 )).astype(np.float64)
-
-                # print(mask.shape, mask.dtype, mask.sum())
-            else:
-                has_mask = 1
-                # print(mask.shape, mask.dtype, mask.sum())
-            if self.cfg.data.pl == 'demo' and not self.cfg.data.mask_oof_path == 'none':
-                mask = np.load(str(self.path / 'input/{}/{}.npy'.format(
-                    self.cfg.data.mask_oof_path, row.ImageUID.replace('.png', ''))
-                                    )).astype(np.float64)
-                row.boxes = np.nan
             if type(row.boxes) == str:
                 for b in eval(row.boxes):
                     mask[int(sz * b['y'] / row.width): int(sz * (b['y'] + b['height']) / row.width),
@@ -480,21 +453,22 @@ class COVIDDataset(Dataset):
                 tf = self.tfms(image=img, mask=mask)
                 img = tf['image']
                 mask = tf['mask']
+            if not img.shape[0] == self.cfg.transform.size:
+                img = cv2.resize(img, (self.cfg.transform.size, self.cfg.transform.size))
             # resize to aux
             if self.cfg.transform.size == 512:
-                mask = cv2.resize(mask, (32, 32))
-                if has_oof_mask:
-                    mask2 = cv2.resize(mask2, (32, 32))
+                msksz = 32
             elif self.cfg.transform.size == 384:
-                mask = cv2.resize(mask, (24, 24))
-                if has_oof_mask:
-                    mask2 = cv2.resize(mask2, (32, 32))
-            if has_oof_mask:
-                mask = (1 - self.cfg.data.oof_ratio) * mask + self.cfg.data.oof_ratio * mask2
+                msksz = 24
+            elif self.cfg.transform.size == 640:
+                msksz = 40
+            else:
+                msksz = 32
+            mask = cv2.resize(mask, (msksz, msksz))
             masks.append(torch.FloatTensor(mask).view(1, mask.shape[0], mask.shape[1]))
             img = self.tensor_tfms(img)
             images.append(img)
-            image_as_study.append(image_label)
+            image_as_study.append(label)
         images = torch.stack(images)
         masks = torch.stack(masks)
-        return images, study, label, image_as_study, masks
+        return images, study, label_study, image_as_study, masks

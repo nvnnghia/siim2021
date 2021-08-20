@@ -48,7 +48,6 @@ if __name__ == '__main__':
             model = get_model(cfg).cuda()
             # print(cfg.model.from_checkpoint, type(cfg.model.from_checkpoint))
             if not cfg.model.from_checkpoint == 'none':
-                print(cfg.model.from_checkpoint)
                 checkpoint = cfg.model.from_checkpoint.format(i)
                 print('[ ! ] loading model from checkpoint: {}'.format(checkpoint))
                 load_matched_state(model, torch.load(checkpoint))

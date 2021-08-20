@@ -45,7 +45,7 @@ class COVIDDataset(Dataset):
         ])
         self.path = Path(os.path.dirname(os.path.realpath(__file__)) + '/../')
         self.studys = self.df['StudyInstanceUID'].unique()
-        self.cols = ['Negative for Pneumonia', 'Typical Appearance', 'Indeterminate Appearance', 'Atypical Appearance']
+        self.cols = ['Negative for Pneumonia', 'Typical Appearance']
         self.cols2index = {x: i for i, x in enumerate(self.cols)}
 
     def __len__(self):
@@ -154,14 +154,11 @@ def pred_test(run, fold=0, RANK_AVERAGE = False):
             for f in range(1):
                 rank_avg[:, i] += rankdata(preds[f][:, i]) / preds[0].shape[0]
 
-        rank_avg
-
         pred_mean = rank_avg
     else:
         pred_mean = np.stack(preds).mean(0)
     pred_df = pd.DataFrame(pred_mean,
-                       columns=['negative', 'typical',
-                                'indeterminate', 'atypical'],
+                       columns=['negative', 'typical'],
                        index=images_ids).reset_index()
     mask_pred = np.concatenate(mask_preds)
     return pred_df, mask_pred
@@ -173,14 +170,12 @@ if __name__ == '__main__':
     # csv_save_name = 'aux_bce_agg_exp_rot_30_20_v2l.csv'
 
     run_cfgs = [
-        # [['aux_bce_agg_exp_rot_30_20_v2l.yaml'], 'aux_bce_agg_exp_rot_30_20_v2l.mask',
-        #  'aux_bce_agg_exp_rot_30_20_v2l.csv'],
+        [['two-class-bce-fix-valid-bbox-two-classes-12upload'], 'two_class_bce_fix_valid_bbox_two_classes_12.mask',
+         'two_class_bce_fix_valid_bbox_two_classes_12.csv'],
         # [['aux_bce_agg_exp_rot_30_20_b5.yaml'], 'aux_bce_agg_exp_rot_30_20_b5.mask',
         #  'aux_bce_agg_exp_rot_30_20_b5.csv'],
         # [['aux_bce_v2m_lm_aggron_40_clean_cut1_bce.yaml'], 'aux_bce_v2m_lm_aggron_40_clean_cut1_bce.mask',
         #  'aux_bce_v2m_lm_aggron_40_clean_cut1_bce.csv'],
-        [['aux_bce_agg_exp_rot_30_20.yaml'], 'aux_bce_agg_exp_rot_30_20_b5.mask',
-         'aux_bce_agg_exp_rot_30_20_b5.csv'],
     ]
 
     for runs, mask_save_name, csv_save_name in run_cfgs:
@@ -188,7 +183,7 @@ if __name__ == '__main__':
 
         test_imgs = [x for x in os.listdir(path / 'input/external/')]
         test_df = pd.DataFrame(test_imgs, columns=['ImageUID'])
-        for c in ['Negative for Pneumonia', 'Typical Appearance', 'Indeterminate Appearance', 'Atypical Appearance']:
+        for c in ['Negative for Pneumonia', 'Typical Appearance']:
             test_df[c] = 0
 
         test_df['StudyInstanceUID'] = test_df['ImageUID']
@@ -211,8 +206,7 @@ if __name__ == '__main__':
         fs = []
         for i in range(5):
             sdf = pl_result[i][0].copy()
-            sdf.columns = ['Negative for Pneumonia', 'Typical Appearance',
-               'Indeterminate Appearance', 'Atypical Appearance']
+            sdf.columns = ['Negative for Pneumonia', 'Typical Appearance']
             sdf['fold'] = i
             fs.append(sdf)
         all_pl_df = pd.concat(fs)

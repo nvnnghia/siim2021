@@ -26,7 +26,7 @@ def idoit_collect_func(batch):
         lbl.append(lb)
         image_as_study.extend(ias)
         bbox.extend(bb)
-    return torch.stack(img), study, torch.tensor(lbl), torch.tensor(image_as_study), torch.stack(bbox)
+    return torch.stack(img), study, torch.tensor(lbl), torch.stack(image_as_study), torch.stack(bbox)
 
 
 def tile(img, sz=128, N=12):

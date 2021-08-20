@@ -8,10 +8,10 @@ from sklearn.metrics import accuracy_score, roc_auc_score
 
 def macro_multilabel_auc(label, pred, gpu=-1):
     aucs = []
-    for i in range(4):
+    for i in range(2):
         aucs.append(roc_auc_score(label[:, i], pred[:, i]))
     if gpu == 0:
-        print(np.round(aucs, 4))
+        print(np.round(aucs, 2))
     return np.mean(aucs)
 
 
