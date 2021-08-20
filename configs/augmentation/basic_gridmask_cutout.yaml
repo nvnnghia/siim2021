@@ -1,0 +1,111 @@
+__version__: 0.4.3
+transform:
+  __class_fullname__: albumentations.core.composition.Compose
+  additional_targets: {}
+  bbox_params: null
+  keypoint_params: null
+  p: 1.0
+  transforms:
+  - __class_fullname__: albumentations.core.composition.OneOf
+    p: 0.9
+    transforms:
+    - __class_fullname__: albumentations.augmentations.transforms.ShiftScaleRotate
+      always_apply: false
+      border_mode: 0
+      interpolation: 1
+      mask_value: null
+      p: 0.5
+      rotate_limit:
+      - -4
+      - 4
+      scale_limit:
+      - -0.15000000000000002
+      - 0.1499999999999999
+      shift_limit:
+      - -0.0625
+      - 0.0625
+      value: null
+    - __class_fullname__: albumentations.imgaug.transforms.IAAAffine
+      always_apply: false
+      cval: 0
+      mode: constant
+      order: 1
+      p: 0.5
+      rotate:
+      - -0.0
+      - 0.0
+      scale:
+      - 1.0
+      - 1.0
+      shear:
+      - -20
+      - 20
+      translate_percent: null
+      translate_px: null
+    - __class_fullname__: albumentations.imgaug.transforms.IAAPerspective
+      always_apply: false
+      keep_size: true
+      p: 0.5
+      scale:
+      - 0.05
+      - 0.1
+  - __class_fullname__: albumentations.core.composition.OneOf
+    p: 0.5
+    transforms:
+    - __class_fullname__: albumentations.core.composition.OneOf
+      p: 1
+      transforms:
+      - __class_fullname__: dataloaders.gridmask.GridMask
+        always_apply: false
+        fill_value: 0
+        mode: 0
+        num_grid:
+        - 3
+        - 3
+        p: 0.5
+        rotate:
+        - -15
+        - 15
+      - __class_fullname__: dataloaders.gridmask.GridMask
+        always_apply: false
+        fill_value: 0
+        mode: 1
+        num_grid:
+        - 3
+        - 3
+        p: 0.5
+        rotate:
+        - -15
+        - 15
+      - __class_fullname__: dataloaders.gridmask.GridMask
+        always_apply: false
+        fill_value: 0
+        mode: 2
+        num_grid:
+        - 3
+        - 3
+        p: 0.5
+        rotate:
+        - -15
+        - 15
+    - __class_fullname__: albumentations.core.composition.OneOf
+      p: 0.5
+      transforms:
+      - __class_fullname__: albumentations.augmentations.transforms.Cutout
+        always_apply: false
+        max_h_size: 20
+        max_w_size: 20
+        num_holes: 10
+        p: 1
+      - __class_fullname__: albumentations.augmentations.transforms.Cutout
+        always_apply: false
+        max_h_size: 10
+        max_w_size: 10
+        num_holes: 20
+        p: 1
+      - __class_fullname__: albumentations.augmentations.transforms.Cutout
+        always_apply: false
+        max_h_size: 10
+        max_w_size: 10
+        num_holes: 30
+        p: 1
