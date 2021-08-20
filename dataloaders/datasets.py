@@ -394,10 +394,11 @@ class RANZCRSegDataset(Dataset):
 
 
 class COVIDDataset(Dataset):
-    def __init__(self, df, cfg=None, tfms=None):
+    def __init__(self, df, cfg=None, tfms=None, mode='train'):
         self.df = df
         self.cfg = cfg
         self.tfms = tfms
+        self.mode = mode
         self.tensor_tfms = torchvision.transforms.Compose([
             torchvision.transforms.ToTensor(),
             torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
@@ -408,6 +409,15 @@ class COVIDDataset(Dataset):
         self.studys = self.df['StudyInstanceUID'].unique()
         self.cols = ['Negative for Pneumonia', 'Typical Appearance', 'Indeterminate Appearance', 'Atypical Appearance']
         self.cols2index = {x: i for i, x in enumerate(self.cols)}
+        self.pl_file_path = '5m_plmaskv1' if self.cfg.data.pl_mask_path == 'none' else self.cfg.data.pl_mask_path
+        print('[ ! ] The pl mask we load is from {}'.format(self.pl_file_path))
+        if not self.cfg.data.oof_file == 'none':
+            self.ns = True
+            print('[ ! ] Noise student, ratio of oofs: {}'.format(self.cfg.data.oof_ratio))
+            path = Path(os.path.dirname(os.path.realpath(__file__)))
+            self.oof = pd.read_csv(path / 'oofs' / self.cfg.data.oof_file).set_index('ImageUID')
+        else:
+            self.ns = False
 
     def __len__(self):
         return len(self.studys)
@@ -420,24 +430,46 @@ class COVIDDataset(Dataset):
         study = [idx for _ in range(sub_df.shape[0])]
         image_as_study = []
         bbox = []
-        label_study = self.cols2index[sub_df[self.cols].idxmax(1).values[0]]
-        has_masks = []
+        has_oof_mask = False
+        label = self.cols2index[sub_df[self.cols].idxmax(1).values[0]]
         for i, row in sub_df.iterrows():
+            image_label = row[self.cols].values.astype(np.float)
+            if self.ns and row.ImageUID in list(self.oof.index) and self.mode == 'train':
+                ns_label = self.oof.loc[row.ImageUID][self.cols].values.astype(np.float)
+                image_label = (1 - self.cfg.data.oof_ratio) * image_label + self.cfg.data.oof_ratio * ns_label
+                # load oof mask
+                if not self.cfg.data.mask_oof_path == 'none':
+                    mask2 = np.load(str(self.path / 'input/{}/{}.npy'.format(
+                        self.cfg.data.mask_oof_path, row.ImageUID.replace('.png', ''))
+                    )).astype(np.float64)
+                    has_oof_mask = True
+                # print(image_label)
+            # print(str(self.path / f'input/train/{row.ImageUID}.png'))
             img = cv2.imread(str(self.path / f'input/train/{row.ImageUID}.png'))
+            if not img.shape[0] == self.cfg.transform.size:
+                img = cv2.resize(img, (self.cfg.transform.size, self.cfg.transform.size))
             sz = self.cfg.transform.size
             mask = np.zeros((sz, sz))
             if type(row.boxes) == str and row.boxes == 'none':
                 has_mask = 1
                 row.boxes = np.nan
-                mask = (np.load(str(self.path / 'input/5m_plmaskv1/fold{}/{}.npy'.format(
-                    self.cfg.experiment.run_fold, row.ImageUID.replace('.png', ''))
-                )).astype(np.float) > 0.3).astype(np.float64)
+                # mask = (np.load(str(self.path / 'input/{}/fold{}/{}.npy'.format(
+                #     self.pl_file_path, self.cfg.experiment.run_fold, row.ImageUID.replace('.png', ''))
+                # )).astype(np.float) > 0.3).astype(np.float64)
+
+                mask = np.load(str(self.path / 'input/{}/fold{}/{}.npy'.format(
+                    self.pl_file_path, self.cfg.experiment.run_fold, row.ImageUID.replace('.png', ''))
+                )).astype(np.float64)
+
                 # print(mask.shape, mask.dtype, mask.sum())
             else:
                 has_mask = 1
                 # print(mask.shape, mask.dtype, mask.sum())
-            has_masks.append(has_mask)
-            label = self.cols2index[row[self.cols][row[self.cols] == 1].index[0]]
+            if self.cfg.data.pl == 'demo' and not self.cfg.data.mask_oof_path == 'none':
+                mask = np.load(str(self.path / 'input/{}/{}.npy'.format(
+                    self.cfg.data.mask_oof_path, row.ImageUID.replace('.png', ''))
+                                    )).astype(np.float64)
+                row.boxes = np.nan
             if type(row.boxes) == str:
                 for b in eval(row.boxes):
                     mask[int(sz * b['y'] / row.width): int(sz * (b['y'] + b['height']) / row.width),
@@ -448,28 +480,21 @@ class COVIDDataset(Dataset):
                 tf = self.tfms(image=img, mask=mask)
                 img = tf['image']
                 mask = tf['mask']
-            if not img.shape[0] == self.cfg.transform.size:
-                img = cv2.resize(img, (self.cfg.transform.size, self.cfg.transform.size))
             # resize to aux
             if self.cfg.transform.size == 512:
-                msksz = 32
+                mask = cv2.resize(mask, (32, 32))
+                if has_oof_mask:
+                    mask2 = cv2.resize(mask2, (32, 32))
             elif self.cfg.transform.size == 384:
-                msksz = 24
-            elif self.cfg.transform.size == 640:
-                msksz = 40
-            elif self.cfg.transform.size == 700:
-                msksz = 44
-            elif self.cfg.transform.size == 720:
-                msksz = 45
-            elif self.cfg.transform.size == 768:
-                msksz = 48
-            else:
-                msksz = 32
-            mask = cv2.resize(mask, (msksz, msksz))
+                mask = cv2.resize(mask, (24, 24))
+                if has_oof_mask:
+                    mask2 = cv2.resize(mask2, (32, 32))
+            if has_oof_mask:
+                mask = (1 - self.cfg.data.oof_ratio) * mask + self.cfg.data.oof_ratio * mask2
             masks.append(torch.FloatTensor(mask).view(1, mask.shape[0], mask.shape[1]))
             img = self.tensor_tfms(img)
             images.append(img)
-            image_as_study.append(label)
+            image_as_study.append(image_label)
         images = torch.stack(images)
         masks = torch.stack(masks)
-        return images, study, label_study, image_as_study, masks, has_masks
+        return images, study, label, image_as_study, masks

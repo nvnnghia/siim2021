@@ -3,6 +3,8 @@ from torch.nn.parameter import Parameter
 from torch import nn
 import torch.nn.functional as F
 import timm
+from efficientnet_pytorch import EfficientNet
+
 
 
 def gem(x, p=3, eps=1e-6):
@@ -21,82 +23,6 @@ class GeM(nn.Module):
     def __repr__(self):
         return self.__class__.__name__ + '(' + 'p=' + '{:.4f}'.format(self.p.data.tolist()[0]) + ', ' + 'eps=' + str(self.eps) + ')'
 
-
-def resize_like(x, reference, mode='nearest'):
-    if x.shape[2:] !=  reference.shape[2:]:
-        if mode=='bilinear':
-            x = F.interpolate(x, size=reference.shape[2:],mode='bilinear',align_corners=False)
-        if mode=='nearest':
-            x = F.interpolate(x, size=reference.shape[2:],mode='nearest')
-    return x
-
-
-class SqueezeExcite(nn.Module):
-    def __init__(self, in_channel, reduction=16):
-        super().__init__()
-
-        #channel squeeze excite
-        self.channel = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(in_channel, in_channel // reduction, 1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(in_channel // reduction, in_channel, 1),
-            nn.Sigmoid(),
-        )
-
-        #spatial squeeze excite
-        self.spatial = nn.Sequential(
-            nn.Conv2d(in_channel, 1, kernel_size=1),
-            nn.Sigmoid()
-        )
-
-    def forward(self, x):
-        x = x * self.channel(x) + x * self.spatial(x)
-        return x
-
-
-# Batch Normalization with Enhanced Linear Transformation
-class EnBatchNorm2d(nn.Module):
-    def __init__(self, in_channel, k=3, eps=1e-5):
-        super(EnBatchNorm2d, self).__init__()
-        self.bn = nn.BatchNorm2d(in_channel, eps=1e-5,affine=False)
-        self.conv = nn.Conv2d(in_channel, in_channel,
-                              kernel_size=k,
-                              padding=(k - 1) // 2,
-                              groups=in_channel,
-                              bias=True)
-
-    def forward(self, x):
-        x = self.bn(x)
-        x = self.conv(x)
-        return x
-
-
-class ResDecode(nn.Module):
-    def __init__( self, in_channel, out_channel ):
-        super().__init__()
-        self.attent1 = SqueezeExcite(in_channel)
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(in_channel,out_channel,kernel_size=3,padding=1,bias=False),
-            EnBatchNorm2d(out_channel), #nn.BatchNorm2d(out_channel),
-            nn.ReLU(inplace=True),
-        )
-        self.conv2 = nn.Sequential(
-            nn.Conv2d(out_channel, out_channel, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(out_channel),
-            nn.ReLU(inplace=True),
-        )
-        self.attent2 = SqueezeExcite(out_channel)
-
-    def forward(self, x):
-
-        x = torch.cat(x, 1)
-        x = self.attent1(x)
-
-        x = self.conv1(x)
-        x = self.conv2(x)
-        x = self.attent2(x)
-        return x
 
 class EfficinetNetFN(nn.Module):
     '''
@@ -174,10 +100,10 @@ class EfficinetNetV2(nn.Module):
 
 
 class AUXNet(nn.Module):
-    def __init__(self, name, dropout=0, pool='AdaptiveAvgPool2d'):
+    def __init__(self, name, dropout=0):
         super(AUXNet, self).__init__()
 
-        print('[ AUX model ] dropout: {}, pool: {}'.format(dropout, pool))
+        print('[ AUX model ] dropout: {}'.format(dropout))
         e = timm.models.__dict__[name](pretrained=True, drop_rate=0.3, drop_path_rate=0.2)
         self.model = e
         self.b0 = nn.Sequential(
@@ -211,11 +137,6 @@ class AUXNet(nn.Module):
 
         self.dropout = nn.Dropout(p=dropout)
 
-        if pool == 'AdaptiveAvgPool2d':
-            self.pooling = nn.AdaptiveAvgPool2d(1)
-        elif pool == 'gem':
-            self.pooling = GeM()
-
     # @torch.cuda.amp.autocast()
     def forward(self, image):
         batch_size = len(image)
@@ -230,25 +151,25 @@ class AUXNet(nn.Module):
         x = self.b4(x) #; print (x.shape)  # torch.Size([2, 96, 32, 32])
 #         print(x.shape)
         x = self.b5(x) #; print (x.shape)  # torch.Size([2, 136, 32, 32])
+#         print(x.shape)
         #------------
         mask = self.mask(x)
         #-------------
         x = self.b6(x) #; print (x.shape)  # torch.Size([2, 232, 16, 16])
         x = self.b7(x) #; print (x.shape)  # torch.Size([2, 384, 16, 16])
         x = self.b8(x) #; print (x.shape)  # torch.Size([2, 1536, 16, 16])
-        # x = F.adaptive_avg_pool2d(x,1).reshape(batch_size,-1)
-        x = nn.Flatten()(self.pooling(x))
+        x = F.adaptive_avg_pool2d(x,1).reshape(batch_size,-1)
         #x = F.dropout(x, 0.5, training=self.training)
         x = self.dropout(x)
         logit = self.logit(x)
         return logit, mask
 
 
-class AUXNetV2(nn.Module):
-    def __init__(self, name, dropout=0, pool='AdaptiveAvgPool2d'):
-        super(AUXNetV2, self).__init__()
+class AUXNetL(nn.Module):
+    def __init__(self, name, dropout=0):
+        super(AUXNetL, self).__init__()
 
-        print('[ AUX model ] dropout: {}, pool: {}'.format(dropout, pool))
+        print('[ AUX model ] dropout: {}'.format(dropout))
         e = timm.models.__dict__[name](pretrained=True, drop_rate=0.3, drop_path_rate=0.2)
         self.model = e
         self.b0 = nn.Sequential(
@@ -264,61 +185,175 @@ class AUXNetV2(nn.Module):
         self.b6 = e.blocks[5]
         self.b7 = e.blocks[6]
         self.b8 = nn.Sequential(
-            e.conv_head,  # 384, 1536
+            e.conv_head, #384, 1536
             e.bn2,
             e.act2,
         )
 
-        self.logit = nn.Linear(1280, 4)
-        #         self.mask = nn.Sequential(
-        #             nn.Conv2d(176, 128, kernel_size=3, padding=1),
-        #             nn.BatchNorm2d(128),
-        #             nn.ReLU(inplace=True),
-        #             nn.Conv2d(128, 128, kernel_size=3, padding=1),
-        #             nn.BatchNorm2d(128),
-        #             nn.ReLU(inplace=True),
-        #             nn.Conv2d(128, 1, kernel_size=1, padding=0),
-        #         )
-
-        self.decode1 = ResDecode(304 + 160, 64)
-        self.decode2 = ResDecode(48 + 64, 16)
-
-        if pool == 'AdaptiveAvgPool2d':
-            self.pooling = nn.AdaptiveAvgPool2d(1)
-        elif pool == 'gem':
-            self.pooling = GeM()
+        self.logit = nn.Linear(1280,4)
+        self.mask = nn.Sequential(
+            nn.Conv2d(224, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, 1, kernel_size=1, padding=0),
+        )
 
         self.dropout = nn.Dropout(p=dropout)
-
-        self.mask_logit = nn.Conv2d(16, 1, kernel_size=3, padding=1)
 
     # @torch.cuda.amp.autocast()
     def forward(self, image):
         batch_size = len(image)
-        x = 2 * image - 1  # ; print('input ',   x.shape)
+        # x = 2*image-1     # ; print('input ',   x.shape)
+        x = image
 
-        x = self.b0(x)  # ; print (x.shape)  # torch.Size([2, 40, 256, 256])
-        x = self.b1(x)  # ; print (x.shape)  # torch.Size([2, 24, 256, 256])
-        x1 = self.b2(x)  # ; print (x.shape)  # torch.Size([2, 32, 128, 128])
-        x = self.b3(x1)  # ; print (x.shape)  # torch.Size([2, 48, 64, 64])
-        #         print(x.shape)
-        x2 = self.b4(x)  # ; print (x.shape)  # torch.Size([2, 96, 32, 32])
-        x = self.b5(x2)  # ; print (x.shape)  # torch.Size([2, 136, 32, 32])
-        #         print(x.shape)
-        # ------------
-        #         mask = self.mask(x)
-        # -------------
-        x3 = self.b6(x)  # ; print (x.shape)  # torch.Size([2, 232, 16, 16])
-        x = self.b7(x3)  # ; print (x.shape)  # torch.Size([2, 384, 16, 16])
-        x = self.b8(x)  # ; print (x.shape)  # torch.Size([2, 1536, 16, 16])
-        #         x = F.adaptive_avg_pool2d(x,1).reshape(batch_size,-1)
-        # x = F.dropout(x, 0.5, training=self.training)
-        x = nn.Flatten()(self.pooling(x))
+        x = self.b0(x) #; print (x.shape)  # torch.Size([2, 40, 256, 256])
+        x = self.b1(x) #; print (x.shape)  # torch.Size([2, 24, 256, 256])
+        x = self.b2(x) #; print (x.shape)  # torch.Size([2, 32, 128, 128])
+        x = self.b3(x) #; print (x.shape)  # torch.Size([2, 48, 64, 64])
+#         print(x.shape)
+        x = self.b4(x) #; print (x.shape)  # torch.Size([2, 96, 32, 32])
+#         print(x.shape)
+        x = self.b5(x) #; print (x.shape)  # torch.Size([2, 136, 32, 32])
+#         print(x.shape)
+        #------------
+        mask = self.mask(x)
+        #-------------
+        x = self.b6(x) #; print (x.shape)  # torch.Size([2, 232, 16, 16])
+        x = self.b7(x) #; print (x.shape)  # torch.Size([2, 384, 16, 16])
+        x = self.b8(x) #; print (x.shape)  # torch.Size([2, 1536, 16, 16])
+        x = F.adaptive_avg_pool2d(x,1).reshape(batch_size,-1)
+        #x = F.dropout(x, 0.5, training=self.training)
+        x = self.dropout(x)
         logit = self.logit(x)
-
-        z = self.decode1([x2, resize_like(x3, x2)])  # ; print('d1',x.size())
-        z = self.decode2([z, resize_like(x1, z)])  # ; print('d1',x.size())
-        mask = self.mask_logit(z)
-
         return logit, mask
 
+class AUXNetEffv2s(nn.Module):
+    def __init__(self, name, dropout=0):
+        super(AUXNetEffv2s, self).__init__()
+
+        print('[ AUX model ] dropout: {}'.format(dropout))
+        e = timm.models.__dict__[name](pretrained=True, drop_rate=0.3, drop_path_rate=0.2)
+        self.model = e
+        self.b0 = nn.Sequential(
+            e.conv_stem,
+            e.bn1,
+            e.act1,
+        )
+        self.b1 = e.blocks[0]
+        self.b2 = e.blocks[1]
+        self.b3 = e.blocks[2]
+        self.b4 = e.blocks[3]
+        self.b5 = e.blocks[4]
+        self.b6 = e.blocks[5]
+#         self.b7 = e.blocks[6]
+        self.b8 = nn.Sequential(
+            e.conv_head, #384, 1536
+            e.bn2,
+            e.act2,
+        )
+
+        self.logit = nn.Linear(1280,4)
+        self.mask = nn.Sequential(
+            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, 1, kernel_size=1, padding=0),
+        )
+
+        self.dropout = nn.Dropout(p=dropout)
+
+    # @torch.cuda.amp.autocast()
+    def forward(self, image):
+        batch_size = len(image)
+        # x = 2*image-1     # ; print('input ',   x.shape)
+        x = image
+
+        x = self.b0(x) #; print (x.shape)  # torch.Size([2, 40, 256, 256])
+        x = self.b1(x) #; print (x.shape)  # torch.Size([2, 24, 256, 256])
+        x = self.b2(x) #; print (x.shape)  # torch.Size([2, 32, 128, 128])
+        x = self.b3(x) #; print (x.shape)  # torch.Size([2, 48, 64, 64])
+#         print(x.shape)
+        x = self.b4(x) #; print (x.shape)  # torch.Size([2, 96, 32, 32])
+#         print(x.shape)
+        mask = self.mask(x)
+        x = self.b5(x) #; print (x.shape)  # torch.Size([2, 136, 32, 32])
+#         print(x.shape)
+        #------------
+        #-------------
+        x = self.b6(x) #; print (x.shape)  # torch.Size([2, 232, 16, 16])
+#         x = self.b7(x) #; print (x.shape)  # torch.Size([2, 384, 16, 16])
+        x = self.b8(x) #; print (x.shape)  # torch.Size([2, 1536, 16, 16])
+        x = F.adaptive_avg_pool2d(x,1).reshape(batch_size,-1)
+        #x = F.dropout(x, 0.5, training=self.training)
+        x = self.dropout(x)
+        logit = self.logit(x)
+        return logit, mask
+
+
+class AUXNetb5(nn.Module):
+    def __init__(self, name, dropout=0):
+        super(AUXNetb5, self).__init__()
+
+        print('[ AUX model ] dropout: {}'.format(dropout))
+        e = EfficientNet.from_pretrained('efficientnet-b5')
+        self.model = e
+        self.b0 = nn.Sequential(
+            e._conv_stem,
+            e._bn0,
+        )
+        self.b1 = nn.Sequential(*e._blocks[:3])
+        self.b2 = nn.Sequential(*e._blocks[3:8])
+        self.b3 = nn.Sequential(*e._blocks[8:13])
+        self.b4 = nn.Sequential(*e._blocks[13:20])
+        self.b5 = nn.Sequential(*e._blocks[20:27])
+        self.b6 = nn.Sequential(*e._blocks[27:36])
+        self.b7 = nn.Sequential(*e._blocks[36:39])
+        self.b8 = nn.Sequential(
+            e._conv_head, #384, 1536
+            e._bn1,
+        )
+        self.logit = nn.Linear(2048,4)
+        self.mask = nn.Sequential(
+            nn.Conv2d(176, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, 1, kernel_size=1, padding=0),
+        )
+
+        self.dropout = nn.Dropout(p=dropout)
+
+    # @torch.cuda.amp.autocast()
+    def forward(self, image):
+        batch_size = len(image)
+        # x = 2*image-1     # ; print('input ',   x.shape)
+        x = image
+
+        x = self.b0(x) #; print (x.shape)  # torch.Size([2, 40, 256, 256])
+        x = self.b1(x) #; print (x.shape)  # torch.Size([2, 24, 256, 256])
+        x = self.b2(x) #; print (x.shape)  # torch.Size([2, 32, 128, 128])
+        x = self.b3(x) #; print (x.shape)  # torch.Size([2, 48, 64, 64])
+#         print(x.shape)
+        x = self.b4(x) #; print (x.shape)  # torch.Size([2, 96, 32, 32])
+#         print(x.shape)
+        x = self.b5(x) #; print (x.shape)  # torch.Size([2, 136, 32, 32])
+#         print(x.shape)
+        #------------
+        mask = self.mask(x)
+        #-------------
+        x = self.b6(x) #; print (x.shape)  # torch.Size([2, 232, 16, 16])
+        x = self.b7(x) #; print (x.shape)  # torch.Size([2, 384, 16, 16])
+        x = self.b8(x) #; print (x.shape)  # torch.Size([2, 1536, 16, 16])
+        x = F.adaptive_avg_pool2d(x,1).reshape(batch_size,-1)
+        #x = F.dropout(x, 0.5, training=self.training)
+        x = self.dropout(x)
+        logit = self.logit(x)
+        return logit, mask

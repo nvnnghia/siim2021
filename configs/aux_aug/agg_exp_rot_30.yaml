@@ -49,10 +49,10 @@ eval:
   batch_size: 32
 
 loss:
-  name: 'label_smooth_ce'
+  name: 'bce'
   seg_weight: 40
+  eps: 0.1
   params:
-    eps: 0.1
     reduction: 'none'
 
 optimizer:

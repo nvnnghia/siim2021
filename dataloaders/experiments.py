@@ -27,7 +27,7 @@ class AnnotatedRandomKTrainTestSplit:
         path = Path(os.path.dirname(os.path.realpath(__file__)))
         # load configs
 
-        train = pd.read_csv(path / 'split' / 'siim_group_kfold_agree_v2.csv')
+        train = pd.read_csv(path / 'split' / 'siim_group_kfold.csv')
 
         train['is_external'] = False
         # train['img_path'] = ''
@@ -40,67 +40,46 @@ class AnnotatedRandomKTrainTestSplit:
         #     train = train[train.StudyInstanceUID.isin(self.annotation.StudyInstanceUID.unique())]
         #
         #     print(f'[ W ] Annotation Only mode, before: {b}, after: {train.shape[0]}')
-        cols = ['Negative for Pneumonia', 'Typical Appearance', 'Indeterminate Appearance', 'Atypical Appearance']
 
         self.train_meta, self.valid_meta = (train[train.fold != cfg.experiment.run_fold],
                                             train[train.fold == cfg.experiment.run_fold])
 
-        if cfg.data.dedul:
-            print(f'[ ! ] Warning: remove duplicated image~, before: {self.train_meta.shape}')
-            self.train_meta = self.train_meta[self.train_meta.keep].copy()
-            print(f'[ ! ] Warning: remove duplicated image~, after: {self.train_meta.shape}')
-
-        if cfg.data.clean:
-            print(f'[ ! ] Warning: remove disagree image~, before: {self.train_meta.shape}')
-            keep = self.train_meta[self.train_meta.agree > 0].copy()
-            if cfg.data.clean_replace:
-                mod = self.train_meta[(self.train_meta.agree == 0) & (self.train_meta.votes == 4)].copy()
-                cols = ['Negative for Pneumonia', 'Typical Appearance', 'Indeterminate Appearance', 'Atypical Appearance']
-                cvt = {'pA': 'Negative for Pneumonia',
-                       'pB': 'Typical Appearance',
-                       'pC': 'Indeterminate Appearance',
-                       'pD': 'Atypical Appearance'}
-                mod[cols] = 0
-                for i, x in mod.iterrows():
-                    mod.loc[i, cvt[x['pred_vote']]] = 1
-                self.train_meta = pd.concat([keep, mod])
-                print(f'[ ! ] Warning: modified disagree image~, shape: {mod.shape}')
+        if cfg.data.pl == 'soft':
+            if cfg.data.pl_file == 'none':
+                pl_file = '5m_pl_0718.csv'
             else:
-                self.train_meta = keep
-            print(f'[ ! ] Warning: modified/remove disagree image~, after: {self.train_meta.shape}')
-
-        if cfg.data.pl == 'hard':
-            df = pd.read_csv(path / 'split' / '5m_pl_0718.csv')
+                pl_file = cfg.data.pl_file
+            print('[ ! ] The pl csv we load is from {}'.format(pl_file))
+            df = pd.read_csv(path / 'split' / pl_file)
             df = df[df.fold == cfg.experiment.run_fold]
-            for c in cols:
-                df.loc[df[c] > cfg.data.threshold, c] = 1
-                df.loc[df[c] <= cfg.data.threshold, c] = 0
-            df = df[df[cols].sum(1) == 1]
+            # for c in cols:
+            #     df.loc[df[c] > cfg.data.threshold, c] = 1
+            #     df.loc[df[c] <= cfg.data.threshold, c] = 0
+            # df = df[df[cols].sum(1) == 1]
             df['ImageUID'] = df.apply(lambda x: x.ImageUID[:-4], 1)
             df['boxes'] = 'none'
             self.train_meta = pd.concat([self.train_meta, df])
-            print(self.train_meta)
-
-        # if len(self.cfg.experiment.externals) > 0:
-        #     for i, x in enumerate(self.cfg.experiment.externals):
-        #         print(f'[ i ] Load external dataset: {x.format(cfg.experiment.run_fold)}')
-        #         data = pd.read_csv(path / 'split' / x)
-        #         data['is_external'] = True
-        #         data = data[~data.ID.isin(['406_G4_1', '802_C3_1', '92_F8_1', '1615_A8_4', '140_F12_1'])]
-        #         data['img_path'] = self.cfg.data.external_image_prefixs[i]
-        #         print('[ i ] Image looks like: {}'.format(data['img_path'][0]))
-        #         self.train_meta = pd.concat([self.train_meta, data])
-        #
-        # if self.cfg.experiment.anno_only and self.cfg.experiment.keep_valid:
-        #     b = self.train_meta.shape[0]
-        #     self.train_meta = self.train_meta[self.train_meta.StudyInstanceUID.isin(self.annotation.StudyInstanceUID.unique())]
-        #
-        #     print(f'[ W ] Annotation Only mode keep valid, before: {b}, after: {self.train_meta.shape[0]}')
+            # print(self.train_meta)
+        elif cfg.data.pl == 'demo':
+            if cfg.data.pl_file == 'none':
+                pl_file = '5m_pl_0718.csv'
+            else:
+                pl_file = cfg.data.pl_file
+            print('[ ! ] The pl csv we load is from {}'.format(pl_file))
+            df = pd.read_csv(path / 'split' / pl_file)
+            df = df[df.fold == cfg.experiment.run_fold]
+            # for c in cols:
+            #     df.loc[df[c] > cfg.data.threshold, c] = 1
+            #     df.loc[df[c] <= cfg.data.threshold, c] = 0
+            # df = df[df[cols].sum(1) == 1]
+            # df['boxes'] = 'none'
+            df['is_external'] = False
+            self.train_meta = df
 
         if cfg.basic.debug:
             print('[ W ] Debug Mode!, down sample')
-            self.train_meta = self.train_meta.sample(frac=0.01)
-            self.valid_meta = self.valid_meta.sample(frac=0.1)
+            self.train_meta = self.train_meta.sample(frac=0.02)
+            self.valid_meta = self.valid_meta.sample(frac=0.02)
 
     def get_dataloader(self, test_only=False, train_shuffle=True, infer=False, tta=-1, tta_tfms=None):
         if test_only:
@@ -177,7 +156,7 @@ class AnnotatedRandomKTrainTestSplit:
         #                       cfg=self.cfg, prefix=self.cfg.experiment.preprocess)
         # def __init__(self, df, tfms=None, cfg=None, mode='train'):
         # valid_ds = RANZERDataset(df=self.valid_meta, tfms=val_tfms, cfg=self.cfg, mode='train')
-        valid_ds = COVIDDataset(self.valid_meta, tfms=val_tfms, cfg=self.cfg)
+        valid_ds = COVIDDataset(self.valid_meta, tfms=val_tfms, cfg=self.cfg, mode='valid')
         valid_dl = DataLoader(dataset=valid_ds, batch_size=self.cfg.eval.batch_size, collate_fn=idoit_collect_func,
                               num_workers=self.cfg.transform.num_preprocessor, pin_memory=True)
         return train_dl, valid_dl, None

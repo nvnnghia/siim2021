@@ -89,11 +89,13 @@ class Data(Element):
         self.full_mask = dict.get('full_mask', False)
         self.external_image_prefixs = dict.get('external_image_prefixs', [])
         self.external_mask_prefixs = dict.get('external_mask_prefixs', [])
-        self.dedul = dict.get('dedul', False)
-        self.clean = dict.get('clean', False)
-        self.clean_replace = dict.get('clean_replace', False)
-        self.pl = dict.get('pl', '')
-        self.threshold = dict.get('threshold', 0.8)
+        self.pl = dict.get('pl', 'none')
+        self.pl_file = dict.get('pl_file', 'none')
+        self.oof_file = dict.get('oof_file', 'none')
+        self.mask_oof_path = dict.get('mask_oof_path', 'none')
+        self.oof_ratio = dict.get('oof_ratio', 0)
+        self.pl_mask_path = dict.get('pl_mask_path', 'none')
+
 
 
 class Model(Element):
@@ -154,6 +156,7 @@ class Loss(Element):
         self.weight_type = dict.get('weight_type', 'None')
         self.weight_value = dict.get('weight_value', None)
         self.seg_weight = int(dict.get('seg_weight', 1))
+        self.eps = dict.get('eps', 0)
 
 
 class Optimizer(Element):

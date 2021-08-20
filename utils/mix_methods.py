@@ -139,28 +139,7 @@ def as_cutmix(input,target,image_size,beta,model=None):
     return input,target,target_b,lam_a.cuda(),lam_b.cuda()
 
 
-# def cutmix(input,target,beta):
-#     r = np.random.rand(1)
-#     lam_a = torch.ones(input.size(0)).cuda()
-#     target_b = target.clone()
-#
-#     if r < True:
-#         bs = input.size(0)
-#         lam = np.random.beta(beta, beta)
-#         rand_index = torch.randperm(bs).cuda()
-#         target_b = target[rand_index]
-#         input_b = input[rand_index].clone()
-#         bbx1, bby1, bbx2, bby2 = utils.rand_bbox(input.size(), lam)
-#         input[:, :, bbx1:bbx2, bby1:bby2] = input_b[:, :, bbx1:bbx2, bby1:bby2]
-#
-#         # adjust lambda to exactly match pixel ratio
-#         lam_a = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (input.size()[-1] * input.size()[-2]))
-#         lam_a *= torch.ones(input.size(0))
-#
-#     lam_b = 1 - lam_a
-#     return input,target,target_b,lam_a.cuda(),lam_b.cuda()
-
-def cutmix(input,target,mask,beta):
+def cutmix(input,target,beta):
     r = np.random.rand(1)
     lam_a = torch.ones(input.size(0)).cuda()
     target_b = target.clone()
@@ -171,17 +150,15 @@ def cutmix(input,target,mask,beta):
         rand_index = torch.randperm(bs).cuda()
         target_b = target[rand_index]
         input_b = input[rand_index].clone()
-        mask_b = mask[rand_index].clone()
         bbx1, bby1, bbx2, bby2 = utils.rand_bbox(input.size(), lam)
         input[:, :, bbx1:bbx2, bby1:bby2] = input_b[:, :, bbx1:bbx2, bby1:bby2]
-        mask[:, :, bbx1:bbx2, bby1:bby2] = mask_b[:, :, bbx1:bbx2, bby1:bby2]
 
         # adjust lambda to exactly match pixel ratio
         lam_a = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (input.size()[-1] * input.size()[-2]))
         lam_a *= torch.ones(input.size(0))
 
     lam_b = 1 - lam_a
-    return input,target,target_b,lam_a.cuda(),lam_b.cuda(),mask
+    return input,target,target_b,lam_a.cuda(),lam_b.cuda()
 
 
 def cutout(input,target,image_size=None,beta=None,model=None):

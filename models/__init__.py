@@ -5,7 +5,7 @@ from models.margins import CosineSe50, EfficinetNetArcFace, EfficinetNetCosine
 from models.distance import ArcModel, ArcModelTail
 from models.tile_model import TileModel, ConcatModel, SLModel
 from models.resnetd import RANZCRResNet200D
-from models.efficient import EfficinetNet, EfficinetNetV2, AUXNet, AUXNetV2
+from models.efficient import EfficinetNet, EfficinetNetV2, AUXNet, AUXNetEffv2s, AUXNetb5, AUXNetL
 from configs import Config
 from models.unet import R200DUnet, R200DUnetS, R50DUnetS
 # from models.unet_att import convert_act_cls, R200DUnetS_ATT
@@ -13,18 +13,18 @@ from models.eff_unet import B3Unet, B5Unet, B7Unet
 
 
 def get_model(cfg: Config, pretrained='imagenet'):
-    if cfg.model.name in ['v2m_aux_v2']:
-        pool = cfg.model.param.get('last_pool', 'AdaptiveAvgPool2d')
-        print('[ ! ] Model with aux loss, pooling: {}'.format(pool))
-        return AUXNetV2(name='tf_efficientnetv2_m', dropout=cfg.model.param.get('dropout', 0), pool=pool)
+    if cfg.model.name in ['b5_aux']:
+        print('[ ! ] Model with aux loss')
+        return AUXNetb5(name='', dropout=cfg.model.param.get('dropout', 0))
+    if cfg.model.name in ['v2s_aux']:
+        print('[ ! ] Model with aux loss')
+        return AUXNetEffv2s(name='tf_efficientnetv2_s', dropout=cfg.model.param.get('dropout', 0))
     if cfg.model.name in ['v2l_aux']:
-        pool = cfg.model.param.get('last_pool', 'AdaptiveAvgPool2d')
-        print('[ ! ] Model with aux loss, pooling: {}'.format(pool))
-        return AUXNet(name='tf_efficientnetv2_l', dropout=cfg.model.param.get('dropout', 0), pool=pool)
+        print('[ ! ] Model with aux loss and effv2l')
+        return AUXNetL(name='tf_efficientnetv2_l', dropout=cfg.model.param.get('dropout', 0))
     if cfg.model.name in ['v2m_aux']:
-        pool = cfg.model.param.get('last_pool', 'AdaptiveAvgPool2d')
-        print('[ ! ] Model with aux loss, pooling: {}'.format(pool))
-        return AUXNet(name='tf_efficientnetv2_m', dropout=cfg.model.param.get('dropout', 0), pool=pool)
+        print('[ ! ] Model with aux loss')
+        return AUXNet(name='tf_efficientnetv2_m', dropout=cfg.model.param.get('dropout', 0))
     if cfg.model.name in ['unet50ds']:
         pool = cfg.model.param.get('pool', 'AdaptiveAvgPool2d')
         n_class = 19

@@ -18,7 +18,7 @@ CONSONANT_DIACRITIC = 7 #consonant_diacritic: 7
 ON_KAGGLE: bool = 'KAGGLE_WORKING_DIR' in os.environ
 
 
-def idoit_collect_func_back(batch):
+def idoit_collect_func(batch):
     img, study, lbl, image_as_study, bbox = [], [], [], [], []
     for im, st, lb, ias, bb in batch:
         img.extend(im)
@@ -27,18 +27,6 @@ def idoit_collect_func_back(batch):
         image_as_study.extend(ias)
         bbox.extend(bb)
     return torch.stack(img), study, torch.tensor(lbl), torch.tensor(image_as_study), torch.stack(bbox)
-
-
-def idoit_collect_func(batch):
-    img, study, lbl, image_as_study, bbox, has_masks = [], [], [], [], [], []
-    for im, st, lb, ias, bb, has_m in batch:
-        img.extend(im)
-        study.extend(st)
-        lbl.append(lb)
-        image_as_study.extend(ias)
-        bbox.extend(bb)
-        has_masks.extend(has_m)
-    return torch.stack(img), study, torch.tensor(lbl), torch.tensor(image_as_study), torch.stack(bbox), torch.tensor(has_masks)
 
 
 def tile(img, sz=128, N=12):

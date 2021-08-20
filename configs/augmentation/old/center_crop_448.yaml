@@ -1,1 +1,0 @@
-{"__version__": "0.4.5", "transform": {"__class_fullname__": "albumentations.augmentations.transforms.CenterCrop", "always_apply": false, "p": 1, "height": 448, "width": 448}}
