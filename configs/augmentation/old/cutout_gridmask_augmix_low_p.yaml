@@ -1,0 +1,61 @@
+__version__: 0.4.3
+transform:
+  __class_fullname__: albumentations.core.composition.Compose
+  additional_targets: {}
+  bbox_params: null
+  keypoint_params: null
+  p: 1.0
+  transforms:
+  - __class_fullname__: albumentations.core.composition.OneOf
+    p: 0.5
+    transforms:
+    - __class_fullname__: dataloaders.albu_augmix.SingleCutOut
+      always_apply: false
+      fill: 0
+      p: 1
+      ratio:
+      - 4
+      - 2
+    - __class_fullname__: albumentations.core.composition.OneOf
+      p: 1
+      transforms:
+      - __class_fullname__: dataloaders.gridmask.GridMask
+        always_apply: false
+        fill_value: 0
+        mode: 0
+        num_grid:
+        - 3
+        - 3
+        p: 1.0
+        rotate:
+        - -15
+        - 15
+      - __class_fullname__: dataloaders.gridmask.GridMask
+        always_apply: false
+        fill_value: 0
+        mode: 1
+        num_grid:
+        - 3
+        - 3
+        p: 1.0
+        rotate:
+        - -15
+        - 15
+      - __class_fullname__: dataloaders.gridmask.GridMask
+        always_apply: false
+        fill_value: 0
+        mode: 2
+        num_grid:
+        - 3
+        - 3
+        p: 1.0
+        rotate:
+        - -15
+        - 15
+    - __class_fullname__: dataloaders.albu_augmix.RandomAugMix
+      alpha: 1.0
+      always_apply: false
+      depth: -1
+      p: 1.0
+      severity: 5
+      width: 2

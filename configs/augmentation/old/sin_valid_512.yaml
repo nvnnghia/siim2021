@@ -1,0 +1,14 @@
+__version__: 0.5.2
+transform:
+  __class_fullname__: albumentations.core.composition.Compose
+  additional_targets: {}
+  bbox_params: null
+  keypoint_params: null
+  p: 1.0
+  transforms:
+  - __class_fullname__: albumentations.augmentations.transforms.Resize
+    always_apply: false
+    height: 512
+    interpolation: 1
+    p: 1
+    width: 512

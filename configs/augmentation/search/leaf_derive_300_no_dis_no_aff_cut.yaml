@@ -1,0 +1,71 @@
+__version__: 0.5.2
+transform:
+  __class_fullname__: albumentations.core.composition.Compose
+  additional_targets: {}
+  bbox_params: null
+  keypoint_params: null
+  p: 1.0
+  transforms:
+  - __class_fullname__: albumentations.augmentations.transforms.Resize
+    always_apply: false
+    height: 300
+    interpolation: 1
+    p: 1
+    width: 300
+  - __class_fullname__: albumentations.augmentations.transforms.ShiftScaleRotate
+    always_apply: false
+    border_mode: 2
+    interpolation: 1
+    mask_value: null
+    p: 0.5
+    rotate_limit:
+    - -15
+    - 15
+    scale_limit:
+    - -0.19999999999999996
+    - 0.19999999999999996
+    shift_limit_x:
+    - -0.0625
+    - 0.0625
+    shift_limit_y:
+    - -0.0625
+    - 0.0625
+    value: null
+  - __class_fullname__: albumentations.augmentations.transforms.HueSaturationValue
+    always_apply: false
+    hue_shift_limit:
+    - -0.2
+    - 0.2
+    p: 0.5
+    sat_shift_limit:
+    - -0.2
+    - 0.2
+    val_shift_limit:
+    - -0.2
+    - 0.2
+  - __class_fullname__: albumentations.augmentations.transforms.RandomContrast
+    always_apply: false
+    limit:
+    - -0.2
+    - 0.2
+    p: 0.5
+  - __class_fullname__: albumentations.augmentations.transforms.CLAHE
+    always_apply: false
+    clip_limit:
+    - 1
+    - 4.0
+    p: 0.2
+    tile_grid_size:
+    - 8
+    - 8
+  - __class_fullname__: albumentations.augmentations.transforms.Equalize
+    always_apply: false
+    by_channels: true
+    mode: cv
+    p: 0.2
+  - __class_fullname__: albumentations.augmentations.transforms.Cutout
+    always_apply: false
+    max_h_size: 112
+    max_w_size: 112
+    num_holes: 1
+    p: 0.5

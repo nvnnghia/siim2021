@@ -1,8 +1,0 @@
-train: ../train_f0_s42.txt
-val: ../val_f0_s42.txt
-
-# number of classes
-nc: 4
-
-# class names
-names: [ 'bus', 'truck', 'car', 'motor']

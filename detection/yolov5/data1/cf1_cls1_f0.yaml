@@ -1,8 +1,0 @@
-train: ../data/train_f0_s42_cls1.txt
-val: ../data/val_f0_s42_cls1.txt
-
-# number of classes
-nc: 1
-
-# class names
-names: [ 'bus']

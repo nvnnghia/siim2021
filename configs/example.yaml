@@ -1,0 +1,71 @@
+basic:
+  seed: 233
+  GPU: 0
+  debug: False
+  id: 'unnamed'
+  mode: train
+  search: False
+  amp: 'None'
+
+experiment:
+  name: 'RandomKFoldSplitTest'
+  random_state: 233
+  run_fold: 0
+  batch_sampler: False
+  pos_ratio: 16
+  weight: False
+  count: 16
+  preprocess: JPEG_256_pan
+  image_only: True
+
+data:
+  dir_sv: '../tile_128'
+
+model:
+  name: 'se_resnext50_32x4d'
+  from_checkpoint: 'none'
+  out_feature: 81313
+  params:
+    dropout: 0.5
+    pretrained: True
+
+train:
+  dir: '../results'
+  batch_size: 128
+  num_epochs: 100
+  cutmix: False
+  beta: 1
+  cutmix_prob: 0.5
+  cutmix_prob_increase: 0
+  validations_round: 1
+  freeze_backbond: 1
+  freeze_top_layer_groups: 0
+  freeze_start_epoch: 1
+  clip_grad: 1
+
+eval:
+  batch_size: 16
+
+loss:
+  name: 'ce'
+
+optimizer:
+  name: 'Adam'
+  step: 1
+  params:
+    lr: 0.0005
+    weight_decay: 0.0005
+
+scheduler:
+  name: 'ReduceLROnPlateau'
+  warm_up: False
+  params:
+    factor: 0.2
+    patience: 10
+
+transform:
+  name: 'baseline'
+  num_preprocessor: 8
+  scale: [1.0, 1.2, 1.5]
+  size: 256
+  gray: False

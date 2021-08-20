@@ -1,0 +1,76 @@
+basic:
+  seed: 233
+  GPU: 0
+  debug: False
+  id: 'unnamed'
+  mode: train
+  search: False
+  amp: 'Native'
+
+experiment:
+  name: 'AnnotatedRandomKTrainTestSplit'
+  random_state: 233
+  run_fold: -1
+  batch_sampler: False
+  weight: False
+  preprocess: JPEG_512_pan
+  image_only: True
+  skip_outlier: True
+  outlier: train
+  anno_only: False
+  keep_valid: True
+
+data:
+  image_prefix: 'png_512'
+
+model:
+  name: 'tf_efficientnet_b3'
+  from_checkpoint: 'none'
+  out_feature: 4
+  params:
+    dropout: 0.5
+    pretrained: True
+    pool: gem
+
+train:
+  dir: '../results'
+  batch_size: 24
+  num_epochs: 24
+  cutmix: False
+  beta: 1
+  cutmix_prob: 0.5
+  cutmix_prob_increase: 0
+  validations_round: 1
+  freeze_backbond: 1
+  freeze_top_layer_groups: 0
+  freeze_start_epoch: 1
+
+eval:
+  batch_size: 32
+
+loss:
+  name: 'label_smooth_ce'
+  seg_weight: 0
+  params:
+    eps: 0.1
+    reduction: 'none'
+
+optimizer:
+  name: 'Adam'
+  step: 1
+  params:
+    lr: 0.0004
+    weight_decay: 0
+
+scheduler:
+  name: 'CosineAnnealingLR'
+  warm_up: True
+  params:
+    factor: 0.2
+    patience: 10
+
+transform:
+  name: 's_0220/sin_512_final'
+#  val_name: ''
+  num_preprocessor: 4
+  size: 512
