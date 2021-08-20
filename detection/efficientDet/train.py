@@ -34,15 +34,13 @@ import torch.optim as optim
 from torch.optim import lr_scheduler
 from timm.scheduler import CosineLRScheduler
 from torch.utils.data import Dataset, DataLoader
-
+from warmup_scheduler import GradualWarmupScheduler
 from effdet.efficientdet import HeadNet
 from effdet import get_efficientdet_config, EfficientDet, DetBenchTrain, DetBenchPredict, create_model
 from copy import deepcopy
-from tqdm import tqdm_notebook as tqdm
+from tqdm import tqdm
 import warnings
 warnings.simplefilter('ignore')
-
-from common_util import GradualWarmupSchedulerV2
 
 device = torch.device('cuda')
 torch.multiprocessing.set_sharing_strategy('file_system')
@@ -71,43 +69,56 @@ else:
 
 
 kernel_type = 'd5_1c_512_lr1e4_bs20_augv2_rsc7sc_60epo'
-data_dir = '../../data'
+data_dir = '../../pipeline1/data'
 
 data_size = 512
-jpg_dir = os.path.join(data_dir, f'train_jpg_{data_size}', f'train_jpg_{data_size}')
+jpg_dir = os.path.join(data_dir, f'png{data_size}', 'train')
 
-model_dir = '../models/'
-log_dir = '../logs/'
+model_dir = 'models/'
+log_dir = 'logs/'
 
 enet_type = 'tf_efficientdet_d5'
 image_size = [512, 512]
 num_classes = 1
 init_lr = 1e-4
-batch_size = 20
+batch_size = 8
 warmup_epo = 1
 cosine_epo = 59
 n_epochs = warmup_epo + cosine_epo
 num_workers = 4
 
 
-# In[4]:
 
-
-df_image = pd.read_csv(f'{data_dir}/images.csv')
+df_image = pd.read_csv(f'images.csv')
 df_image['boxes'].fillna("[]", inplace=True)
 df_image['boxes'] = df_image['boxes'].apply(ast.literal_eval)
-df_study = pd.read_csv(f'{data_dir}/study_v2.csv') 
+df_study = pd.read_csv(f'study_v2.csv') 
 df_study['target'] = np.where((df_study.values[:, :4]).astype(int) == 1)[1]
 df_image = df_image.merge(df_study[['StudyInstanceUID', 'target', 'fold']], on='StudyInstanceUID', how='left')
-df_image['filepath'] = df_image.apply(lambda row: os.path.join(jpg_dir, row.StudyInstanceUID+'_'+row.image_id+'.npy'), axis=1)
+df_image['filepath'] = df_image.apply(lambda row: os.path.join(jpg_dir, row.image_id+'.png'), axis=1)
 df_image = df_image.sample(500) if DEBUG else df_image
-df_image.tail()
+print(df_image.tail())
 
 
 # # Dataset
+os.makedirs(log_dir, exist_ok = True)
+os.makedirs(model_dir, exist_ok = True)
 
-# In[5]:
-
+class GradualWarmupSchedulerV2(GradualWarmupScheduler):
+    def __init__(self, optimizer, multiplier, total_epoch, after_scheduler=None):
+        super(GradualWarmupSchedulerV2, self).__init__(optimizer, multiplier, total_epoch, after_scheduler)
+    def get_lr(self):
+        if self.last_epoch > self.total_epoch:
+            if self.after_scheduler:
+                if not self.finished:
+                    self.after_scheduler.base_lrs = [base_lr * self.multiplier for base_lr in self.base_lrs]
+                    self.finished = True
+                return self.after_scheduler.get_lr()
+            return [base_lr * self.multiplier for base_lr in self.base_lrs]
+        if self.multiplier == 1.0:
+            return [base_lr * (float(self.last_epoch) / self.total_epoch) for base_lr in self.base_lrs]
+        else:
+            return [base_lr * ((self.multiplier - 1.) * self.last_epoch / self.total_epoch + 1.) for base_lr in self.base_lrs]
 
 def collate_fn(batch):
     return tuple(zip(*batch))
@@ -129,7 +140,6 @@ class SIIMDataset(Dataset):
         image, boxes = self.load_image_and_boxes(row)
 
         if self.transforms:
-#             for i in range(10):
             sample = self.transforms(**{
                 'image': image,
                 'bboxes': boxes,
@@ -143,18 +153,10 @@ class SIIMDataset(Dataset):
         return image.float(), boxes[:, :4].float(), boxes[:, 4].long(), row.image_id
 
     def load_image_and_boxes(self, row):
-#         image = cv2.imread(row.filepath, 0)
-        image = np.load(row.filepath).astype(np.float32)
+        image = cv2.imread(row.filepath, 0).astype(np.float32)
 
-        if row['max_value'] < 256:
-            image /= 256.
-        elif 256 <= row['max_value'] < 4096:
-            image /= 4096.
-        elif 4096 <= row['max_value'] < 32768:
-            image /= 32768.
-        elif 32768 <= row['max_value'] < 65536:
-            image /= 65536.
-    
+        image /= 256.
+
         n_boxes = len(row['boxes'])
         if n_boxes > 0:
             boxes = np.zeros((n_boxes, 5))
@@ -174,8 +176,6 @@ class SIIMDataset(Dataset):
         boxes[:, :4] = boxes[:, :4].clip(1, 100000)
         return image, boxes
 
-
-# In[6]:
 
 
 import albumentations as A
@@ -224,38 +224,6 @@ transforms_valid = A.Compose(
 )
 
 
-# In[7]:
-
-
-dataset_show = SIIMDataset(df_image, transforms=transforms_train(True))
-from pylab import rcParams
-rcParams['figure.figsize'] = 20,10
-
-f, axarr = plt.subplots(1,2)
-for p in range(2):
-    img, boxes, labels, image_ids = dataset_show[p]
-    boxes = boxes.cpu().numpy().astype(np.int32)
-    labels = labels.cpu().numpy()
-    numpy_image = img.permute(1,2,0).cpu().numpy()[:,:,0]
-    for box, label in zip(boxes, labels):
-#         if label == 1:
-        cv2.rectangle(numpy_image, (box[1], box[0]), (box[3],  box[2]), (0, 1, 0), 2)
-#         else:
-#             cv2.rectangle(numpy_image, (box[1], box[0]), (box[3],  box[2]), (1, 0, 0), 2)
-    axarr[p].imshow(numpy_image)
-
-
-# In[8]:
-
-
-images, box, lb, _ = next(iter(DataLoader(dataset_show, batch_size=8, shuffle=True, collate_fn=collate_fn)))
-target = {
-    'bbox': box,
-    'cls': lb
-}
-
-
-# In[9]:
 
 
 def get_model(enet_type, num_classes, image_size, load_file=None, eval=False):
@@ -275,29 +243,6 @@ def get_model(enet_type, num_classes, image_size, load_file=None, eval=False):
         model.load_state_dict(torch.load(load_file), strict=True)
     return model
 
-
-# In[10]:
-
-
-model = get_model(enet_type, num_classes, image_size)
-model(torch.stack(images), target)#['loss'].backward()
-
-
-# In[11]:
-
-
-optimizer = optim.AdamW(model.parameters(), lr=init_lr)
-scheduler_cosine = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, cosine_epo)
-scheduler_warmup = GradualWarmupSchedulerV2(optimizer, multiplier=10, total_epoch=warmup_epo, after_scheduler=scheduler_cosine)
-lrs = []
-for epoch in range(1, n_epochs+1):
-    scheduler_warmup.step(epoch-1)
-    lrs.append(optimizer.param_groups[0]["lr"])
-rcParams['figure.figsize'] = 20,3
-plt.plot(lrs)
-
-
-# In[12]:
 
 
 def train_epoch(model, loader_train, optimizer, scaler=None):
@@ -319,15 +264,12 @@ def train_epoch(model, loader_train, optimizer, scaler=None):
                 losses = model(images, targets)
 
             scaler.scale(losses['loss']).backward()
-#             scaler.scale(losses['class_loss']).backward()
             scaler.step(optimizer)
             scaler.update()
         elif use_amp:
             losses = model(images, targets)
             with amp.scale_loss(losses['loss'], optimizer) as scaled_loss:
                 scaled_loss.backward()
-#             with amp.scale_loss(losses['class_loss'], optimizer) as scaled_loss:
-#                 scaled_loss.backward()
             optimizer.step()
         else:
             losses = model(images, targets)
@@ -371,8 +313,6 @@ def valid_epoch(model, loader_valid):
 
     return np.mean(val_loss), np.mean(val_cls_loss)
 
-
-# In[13]:
 
 
 def run(fold):
@@ -428,331 +368,6 @@ train class loss: {np.mean(train_cls_loss):.4f}, valid class loss: {(valid_cls_l
     torch.save(model.state_dict(), model_file.replace('best', 'model'))
 
 
-# In[ ]:
-
-
-run(0)  # 823
-
-
-# In[ ]:
-
-
-run(1)
-
-
-# # Analysis
-
-# In[14]:
-
-
-fold = 0
-valid_ = df_image.loc[df_image['fold'] == fold].copy()
-dataset_valid = SIIMDataset(valid_, transforms=transforms_valid)
-valid_loader = torch.utils.data.DataLoader(dataset_valid, batch_size=batch_size, shuffle=False, num_workers=num_workers, collate_fn=collate_fn)
-
-model_file = os.path.join(model_dir, f'{kernel_type}_best_fold{fold}.pth')
-model = get_model(enet_type, num_classes, image_size, model_file, eval=True)
-model.to(device)
-model.eval()
-print()
-
-
-# In[15]:
-
-
-def make_predictions(images, score_threshold):
-    images = torch.stack(images).cuda().float()
-    box_list = []
-    score_list = []
-    with torch.no_grad():
-        det = model(images)
-        for i in range(images.shape[0]):
-            boxes = det[i].detach().cpu().numpy()[:,:4]    
-            scores = det[i].detach().cpu().numpy()[:,4]   
-            label = det[i].detach().cpu().numpy()[:,5]
-            
-            indexes = np.where((scores > score_threshold) & (label > 0))[0]
-            box_list.append(boxes[indexes])
-            score_list.append(scores[indexes])
-    return box_list, score_list
-
-
-# In[16]:
-
-
-#check prediction
-# show_ = valid_[valid_['has_impact']]
-show_ = valid_.iloc[28:40]
-dataset_show = SIIMDataset(show_, transforms=transforms_valid)
-show_loader = torch.utils.data.DataLoader(dataset_show, batch_size=12, shuffle=False, num_workers=num_workers, collate_fn=collate_fn)
-
-cnt = 0
-samples = []
-for images, gt_boxes, labels, _ in show_loader:
-    box_list, score_list = make_predictions(images, score_threshold=0.3)
-    for i in range(len(images)):
-        sample = (images[i].permute(1,2,0).cpu().numpy() * 255).clip(0,255).astype(np.uint8).copy()
-        boxes = box_list[i].astype(np.int32)#.clip(min=0, max=image_size-1)
-        scores = score_list[i]
-        if len(scores) >= 1:
-            fig, ax = plt.subplots(1, 1, figsize=(16, 8))
-            for box, score in zip(boxes, scores):
-                cv2.rectangle(sample, (box[0], box[1]), (box[2], box[3]), (255, 0, 0), 2)
-            for box, l in zip(gt_boxes[i], labels[i]):
-                if l > 0:
-                    cv2.rectangle(sample, (box[1], box[0]), (box[3], box[2]), (0, 255, 0), 2)
-
-            ax.set_axis_off()
-            ax.imshow(sample);
-            cnt += 1
-            samples.append(sample)
-    if cnt >= 6:
-        break
-
-
-# In[17]:
-
-
-'''
-https://www.kaggle.com/pestipeti/competition-metric-details-script
-'''
-# from torch import jit
-# @jit(nopython=True)
-def calculate_iou(gt, pr, form='pascal_voc') -> float:
-    """Calculates the Intersection over Union.
-
-    Args:
-        gt: (np.ndarray[Union[int, float]]) coordinates of the ground-truth box
-        pr: (np.ndarray[Union[int, float]]) coordinates of the prdected box
-        form: (str) gt/pred coordinates format
-            - pascal_voc: [xmin, ymin, xmax, ymax]
-            - coco: [xmin, ymin, w, h]
-    Returns:
-        (float) Intersection over union (0.0 <= iou <= 1.0)
-    """
-    if form == 'coco':
-        gt = gt.copy()
-        pr = pr.copy()
-
-        gt[2] = gt[0] + gt[2]
-        gt[3] = gt[1] + gt[3]
-        pr[2] = pr[0] + pr[2]
-        pr[3] = pr[1] + pr[3]
-
-    # Calculate overlap area
-    dx = min(gt[2], pr[2]) - max(gt[0], pr[0]) + 1
-    
-    if dx < 0:
-        return 0.0
-    
-    dy = min(gt[3], pr[3]) - max(gt[1], pr[1]) + 1
-
-    if dy < 0:
-        return 0.0
-
-    overlap_area = dx * dy
-
-    # Calculate union area
-    union_area = (
-            (gt[2] - gt[0] + 1) * (gt[3] - gt[1] + 1) +
-            (pr[2] - pr[0] + 1) * (pr[3] - pr[1] + 1) -
-            overlap_area
-    )
-
-    return overlap_area / union_area
-
-# @jit(nopython=True)
-def find_best_match(gts, pred, pred_idx, threshold = 0.5, form = 'pascal_voc', ious=None) -> int:
-    """Returns the index of the 'best match' between the
-    ground-truth boxes and the prediction. The 'best match'
-    is the highest IoU. (0.0 IoUs are ignored).
-
-    Args:
-        gts: (List[List[Union[int, float]]]) Coordinates of the available ground-truth boxes
-        pred: (List[Union[int, float]]) Coordinates of the predicted box
-        pred_idx: (int) Index of the current predicted box
-        threshold: (float) Threshold
-        form: (str) Format of the coordinates
-        ious: (np.ndarray) len(gts) x len(preds) matrix for storing calculated ious.
-
-    Return:
-        (int) Index of the best match GT box (-1 if no match above threshold)
-    """
-    best_match_iou = -np.inf
-    best_match_idx = -1
-
-    for gt_idx in range(len(gts)):
-        
-        if gts[gt_idx][0] < 0:
-            # Already matched GT-box
-            continue
-        
-        iou = -1 if ious is None else ious[gt_idx][pred_idx]
-
-        if iou < 0:
-            iou = calculate_iou(gts[gt_idx], pred, form=form)
-            
-            if ious is not None:
-                ious[gt_idx][pred_idx] = iou
-
-        if iou < threshold:
-            continue
-
-        if iou > best_match_iou:
-            best_match_iou = iou
-            best_match_idx = gt_idx
-
-    return best_match_idx
-
-# @jit(nopython=True)
-def calculate_precision(gts, preds, threshold = 0.5, form = 'coco', ious=None) -> float:
-    """Calculates precision for GT - prediction pairs at one threshold.
-
-    Args:
-        gts: (List[List[Union[int, float]]]) Coordinates of the available ground-truth boxes
-        preds: (List[List[Union[int, float]]]) Coordinates of the predicted boxes,
-               sorted by confidence value (descending)
-        threshold: (float) Threshold
-        form: (str) Format of the coordinates
-        ious: (np.ndarray) len(gts) x len(preds) matrix for storing calculated ious.
-
-    Return:
-        (float) Precision
-    """
-    n = len(preds)
-    tp = 0
-    fp = 0
-
-    # for pred_idx, pred in enumerate(preds_sorted):
-    for pred_idx in range(n):
-
-        best_match_gt_idx = find_best_match(gts, preds[pred_idx], pred_idx,
-                                            threshold=threshold, form=form, ious=ious)
-
-        if best_match_gt_idx >= 0:
-            # True positive: The predicted box matches a gt box with an IoU above the threshold.
-            tp += 1
-            # Remove the matched GT box
-            gts[best_match_gt_idx] = -1
-
-        else:
-            # No match
-            # False positive: indicates a predicted box had no associated gt box.
-            fp += 1
-
-    # False negative: indicates a gt box had no associated predicted box.
-    fn = (gts.sum(axis=1) > 0).sum()
-
-    return tp / (tp + fp + fn)
-
-
-# @jit(nopython=True)
-def calculate_image_precision(gts, preds, thresholds = (0.5, ), form = 'coco') -> float:
-    """Calculates image precision.
-       The mean average precision at different intersection over union (IoU) thresholds.
-
-    Args:
-        gts: (List[List[Union[int, float]]]) Coordinates of the available ground-truth boxes
-        preds: (List[List[Union[int, float]]]) Coordinates of the predicted boxes,
-               sorted by confidence value (descending)
-        thresholds: (float) Different thresholds
-        form: (str) Format of the coordinates
-
-    Return:
-        (float) Precision
-    """
-    n_threshold = len(thresholds)
-    image_precision = 0.0
-    
-    ious = np.ones((len(gts), len(preds))) * -1
-    # ious = None
-
-    for threshold in thresholds:
-        precision_at_threshold = calculate_precision(gts.copy(), preds, threshold=threshold,
-                                                     form=form, ious=ious)
-        image_precision += precision_at_threshold / n_threshold
-
-    return image_precision
-
-
-# In[19]:
-
-
-
-fold = 0
-valid_ = df_image.loc[df_image['fold'] == fold].copy()
-# valid_ = valid_[valid_.boxes.map(len) > 0]
-dataset_valid = SIIMDataset(valid_, transforms=transforms_valid)
-valid_loader = torch.utils.data.DataLoader(dataset_valid, batch_size=batch_size, shuffle=False, num_workers=num_workers, collate_fn=collate_fn)
-
-result_image_ids = []
-results_boxes = []
-GT_image_ids = []
-GTs = []
-results_scores = []
-ap_0, ap_1 = [], []
-
-# for th in [0.2, 0.25, 0.3, 0.35]:
-for th in [0.2]:
-
-    for images, gt_boxes, labels, image_ids in tqdm(valid_loader):
-        box_list, score_list = make_predictions(images, score_threshold=th)
-        for i, image in enumerate(images):
-            boxes = box_list[i]
-            scores = score_list[i]
-            image_id = image_ids[i]
-            boxes = boxes.astype(np.int32)
-            boxes[:, 0] = boxes[:, 0].clip(min=0, max=image_size[0]-1)
-            boxes[:, 2] = boxes[:, 2].clip(min=0, max=image_size[0]-1)
-            boxes[:, 1] = boxes[:, 1].clip(min=0, max=image_size[1]-1)
-            boxes[:, 3] = boxes[:, 3].clip(min=0, max=image_size[1]-1)
-            boxes = boxes[:, [1, 0, 3, 2]]
-
-            if len(boxes) == 0:
-                if labels[i][0] == 0:
-                    ap_0.append(1)
-                else:
-                    ap_0.append(0)
-            else:
-                score = calculate_image_precision(gt_boxes[i].numpy(), boxes)
-                ap_1.append(score)
-
-            result_image_ids += [image_id]*len(boxes)
-            results_boxes.append(boxes)
-#             GT_image_ids += [image_id]*gt_boxes[i].shape[0]
-#             GTs.append(gt_boxes[i].numpy())
-            results_scores.append(scores)
-    print(th)
-    print(np.mean(ap_0), np.mean(ap_1))
-    print((np.mean(ap_0) + np.mean(ap_1)) / 2)
-
-
-# In[ ]:
-
-
-
-
-
-# In[28]:
-
-
-box_df = pd.DataFrame(np.concatenate(results_boxes), columns=['left', 'top', 'width', 'height'])
-test_df = pd.DataFrame({'scores':np.concatenate(results_scores), 'image_name':result_image_ids})
-test_df = pd.concat([test_df, box_df], axis=1)
-
-# gt_box_df = pd.DataFrame(np.concatenate(GTs), columns=['left', 'top', 'width', 'height'])
-# gt_df = pd.DataFrame({'image_name':GT_image_ids})
-# gt_df = pd.concat([gt_df, gt_box_df], axis=1)
-
-
-# In[29]:
-
-
-
-
-
-# In[ ]:
-
-
-
+for i in [0,1,2,3,4]:
+    run(i)   
 
