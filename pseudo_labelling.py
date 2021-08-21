@@ -173,12 +173,12 @@ if __name__ == '__main__':
     # csv_save_name = 'aux_bce_agg_exp_rot_30_20_v2l.csv'
 
     run_cfgs = [
-        # [['aux_bce_agg_exp_rot_30_20_v2l.yaml'], 'aux_bce_agg_exp_rot_30_20_v2l.mask',
-        #  'aux_bce_agg_exp_rot_30_20_v2l.csv'],
-        # [['aux_bce_agg_exp_rot_30_20_b5.yaml'], 'aux_bce_agg_exp_rot_30_20_b5.mask',
-        #  'aux_bce_agg_exp_rot_30_20_b5.csv'],
-        # [['aux_bce_v2m_lm_aggron_40_clean_cut1_bce.yaml'], 'aux_bce_v2m_lm_aggron_40_clean_cut1_bce.mask',
-        #  'aux_bce_v2m_lm_aggron_40_clean_cut1_bce.csv'],
+        [['aux_bce_agg_exp_rot_30_20_v2l.yaml'], 'aux_bce_agg_exp_rot_30_20_v2l.mask',
+         'aux_bce_agg_exp_rot_30_20_v2l.csv'],
+        [['aux_bce_agg_exp_rot_30_20_b5.yaml'], 'aux_bce_agg_exp_rot_30_20_b5.mask',
+         'aux_bce_agg_exp_rot_30_20_b5.csv'],
+        [['aux_bce_v2m_lm_aggron_40_clean_cut1_bce.yaml'], 'aux_bce_v2m_lm_aggron_40_clean_cut1_bce.mask',
+         'aux_bce_v2m_lm_aggron_40_clean_cut1_bce.csv'],
         [['aux_bce_agg_exp_rot_30_20.yaml'], 'aux_bce_agg_exp_rot_30_20_b5.mask',
          'aux_bce_agg_exp_rot_30_20_b5.csv'],
     ]
