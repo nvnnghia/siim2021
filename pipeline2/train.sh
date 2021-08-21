@@ -13,6 +13,7 @@ python main.py train -i dddddd_dbg_1_aux_2 -j aux_loss/v2m_lm_aggron.yaml # chec
 python main.py train -i clean_oof_clean_agree_upload -j clean/oof_clean_agree.yaml # checked
 python main.py train -i aux_aug_agg_exp_rot_30.yaml -j aux_aug/agg_exp_rot_30.yaml # checked
 python main.py train -i model_modelV2.upload -j model/modelV2.yaml # checked
+python main.py train -i aux_aug_v2m_lm_aggron_40_clean_cut1.yaml_upload -j aux_aug/v2m_lm_aggron_40_clean_cut1.yaml
 
 git checkout aggron_2class_bce
 python main.py train -i two-class-bce-fix-valid-bbox-two-classes-12upload -j two_class_bce/fix_valid_bbox_two_classes_12.yaml # checked
