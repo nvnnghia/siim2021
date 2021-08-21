@@ -1,7 +1,7 @@
 #! /bin/bash
 
 # train naive model
-cd covid19
+#cd covid19
 git checkout aggron_bce
 python main.py train -i aux_bce_agg_exp_rot_30_20_v2l.yaml -j aux_bce/agg_exp_rot_30_20_v2l.yaml  # checked
 python main.py train -i aux_bce_agg_exp_rot_30_20_b5.yaml -j aux_bce/agg_exp_rot_30_20_b5.yaml # checked
