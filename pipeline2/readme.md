@@ -30,6 +30,7 @@ Uncompress #1's data to input folder `train` and `test` respectively. Download #
 
 ### Full training
 * run `train.sh` to get the result
+* If there is any issue training `train.sh`, you can manually switch to each branch and run each bash cmd.
 
 ### Predict the test set
 * Please refer to kaggle notebook [sub1](https://www.kaggle.com/nvnnghia/siim2021-final-sub2).
