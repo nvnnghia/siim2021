@@ -32,4 +32,4 @@ Uncompress #1's data to input folder `train` and `test` respectively. Download #
 * run `train.sh` to get the result
 
 ### Predict the test set
-* Please refer to kaggle notebook [sub1](https://www.kaggle.com/steamedsheep/hpa-final-submission-2-candidate-ii) and [sub2](https://www.kaggle.com/steamedsheep/draft-of-submission-of-dakiro-model-sunzi-w0-5?scriptVersionId=62584023)
+* Please refer to kaggle notebook [sub1](https://www.kaggle.com/nvnnghia/siim2021-final-sub2).
